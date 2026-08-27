@@ -1,4 +1,4 @@
-.PHONY: test-user test-matches test-api
+.PHONY: test-user test-matches test-player test-team test-club-matches test-api
 
 test-user:
 	@./scripts/smoke/bbs-user.sh
@@ -6,4 +6,13 @@ test-user:
 test-matches:
 	@./scripts/smoke/bbs-matches.sh
 
-test-api: test-user test-matches
+test-player:
+	@./scripts/smoke/bbs-player.sh
+
+test-team:
+	@./scripts/smoke/bbs-team.sh
+
+test-club-matches:
+	@./scripts/smoke/bbs-club-matches.sh
+
+test-api: test-user test-matches test-player test-team test-club-matches
