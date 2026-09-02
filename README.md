@@ -3,8 +3,6 @@
 Plataforma de informações para fãs de futebol, alimentada pela
 [Big Balls Sports Data][api] através do cliente [pitchside][pitchside].
 
-[![CI][ci-badge]][ci]
-
 ## Requisitos
 
 - Python 3.12 ou superior
@@ -124,7 +122,5 @@ tests/                    suíte, sem acesso à rede
 MIT. Ver [LICENSE](LICENSE).
 
 [api]: https://bigballsdata.com
-[ci]: https://github.com/phael-exe/foota-toota/actions/workflows/ci.yml
-[ci-badge]: https://github.com/phael-exe/foota-toota/actions/workflows/ci.yml/badge.svg
 [keys]: https://bigballsdata.com/dashboard/keys
 [pitchside]: https://pypi.org/project/pitchside/
