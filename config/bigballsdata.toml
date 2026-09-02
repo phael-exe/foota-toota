@@ -1,0 +1,17 @@
+base_url = "https://api.bigballsdata.com"
+max_retries = 3
+
+[timeout]
+connect = 10.0
+read = 60.0
+
+[cache]
+backend = "disk"
+max_entries = 512
+
+[footatoota]
+log_level = "INFO"
+api_log_level = "INFO"
+json_logs = false
+default_sport = "football"
+default_page_size = 200
