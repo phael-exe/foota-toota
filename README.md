@@ -3,6 +3,13 @@
 Plataforma de informações para fãs de futebol, alimentada pela
 [Big Balls Sports Data][api] através do cliente [pitchside][pitchside].
 
+[![CI][ci-badge]][ci]
+[![Python][python-badge]][python]
+[![License: MIT][license-badge]][license]
+[![uv][uv-badge]][uv]
+[![Ruff][ruff-badge]][ruff]
+[![pre-commit][pre-commit-badge]][pre-commit]
+
 ## Requisitos
 
 - Python 3.12 ou superior
@@ -26,9 +33,9 @@ O `.env` está ignorado pelo Git. Nunca versione uma chave real.
 
 ## Configuração
 
-O que não é segredo vive em `config/bigballsdata.toml`, versionado. As chaves
-de topo configuram o cliente HTTP; a tabela `[footatoota]` configura a
-aplicação.
+O que não é segredo é versionado em `config/bigballsdata.toml`. As chaves
+de topo configuram o cliente HTTP, enquanto a tabela `[footatoota]`
+configura a aplicação.
 
 ```toml
 base_url = "https://api.bigballsdata.com"
@@ -53,12 +60,6 @@ default_page_size = 200
 A precedência é: argumento explícito, depois variável de ambiente, depois o
 arquivo, depois os padrões. As chaves do cliente aceitam o prefixo
 `PITCHSIDE_` e as da aplicação o prefixo `FOOTATOOTA_`.
-
-Dois valores merecem explicação. O `read` é de 60 segundos porque endpoints
-de detalhe respondem em 15 segundos ou mais, enquanto o `connect` fica em 10
-para que um host morto falhe rápido. O cache em disco existe porque o plano
-gratuito permite mil requisições por dia, e o TTL por rota faz catálogos
-sobreviverem entre execuções. `make clean` esvazia esse cache.
 
 ## Uso
 
@@ -104,23 +105,26 @@ preservando os campos estruturados da API:
 | `make check` | Lint, tipos e testes, o mesmo que a CI. |
 | `make clean` | Esvazia o cache em disco do cliente. |
 
-Os testes não tocam a rede: as respostas HTTP são simuladas com `respx`. Um
-teste marcado com `@pytest.mark.live` só roda com `uv run pytest -m live` e
-exige uma chave válida.
-
-## Estrutura
-
-```
-config/bigballsdata.toml  configuração do cliente e da aplicação
-config/league-codes.json  catálogo de competições, para normalizar ligas
-src/footatoota/           pacote da aplicação
-tests/                    suíte, sem acesso à rede
-```
+As respostas HTTP nos testes são simuladas com `respx`. Um teste marcado
+com `@pytest.mark.live` só roda com `uv run pytest -m live` e exige uma
+chave válida.
 
 ## Licença
 
 MIT. Ver [LICENSE](LICENSE).
 
 [api]: https://bigballsdata.com
+[ci]: https://github.com/phael-exe/foota-toota/actions/workflows/ci.yml
+[ci-badge]: https://github.com/phael-exe/foota-toota/actions/workflows/ci.yml/badge.svg
 [keys]: https://bigballsdata.com/dashboard/keys
+[license]: LICENSE
+[license-badge]: https://img.shields.io/badge/license-MIT-green.svg
 [pitchside]: https://pypi.org/project/pitchside/
+[pre-commit]: https://github.com/pre-commit/pre-commit
+[pre-commit-badge]: https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white
+[python]: https://www.python.org/downloads/
+[python-badge]: https://img.shields.io/badge/python-3.12+-blue.svg
+[ruff]: https://github.com/astral-sh/ruff
+[ruff-badge]: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json
+[uv]: https://github.com/astral-sh/uv
+[uv-badge]: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json
