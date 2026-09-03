@@ -1,119 +1,130 @@
 # Foota Toota
 
-Plataforma de informações para fãs de futebol.
+Plataforma de informações para fãs de futebol, alimentada pela
+[Big Balls Sports Data][api] através do cliente [pitchside][pitchside].
 
-## Smoke tests da API
+[![CI][ci-badge]][ci]
+[![Python][python-badge]][python]
+[![License: MIT][license-badge]][license]
+[![uv][uv-badge]][uv]
+[![Ruff][ruff-badge]][ruff]
+[![pre-commit][pre-commit-badge]][pre-commit]
 
-O projeto possui scripts para testar a autenticação e consultar partidas,
-jogadores e clubes na API Big Balls Data.
+## Requisitos
 
-### Pré-requisitos
+- Python 3.12 ou superior
+- [uv](https://docs.astral.sh/uv/) para gerenciar o ambiente
+- Uma chave da Big Balls Data, gratuita em [bigballsdata.com][keys]
 
-- Bash
-- Make
-- curl
-- jq
-
-### Configuração
-
-Crie o arquivo local de variáveis de ambiente a partir do template:
+## Instalação
 
 ```bash
+make install
 cp .env.template .env
 ```
 
-Adicione ao `.env` uma chave gerada no
-[painel da Big Balls Data](https://bigballsdata.com/dashboard/keys):
+Adicione a chave ao `.env`:
 
 ```dotenv
-BIGBALLSDATA_API_KEY=sua_chave_aqui
+BIGBALLSDATA_API_KEY=bbs_live_...
 ```
 
-O `.env` está ignorado pelo Git. Nunca versione nem compartilhe uma chave real.
+O `.env` está ignorado pelo Git. Nunca versione uma chave real.
 
-### Comandos
+## Configuração
 
-Execute os comandos a partir da raiz do projeto:
+O que não é segredo é versionado em `config/bigballsdata.toml`. As chaves
+de topo configuram o cliente HTTP, enquanto a tabela `[footatoota]`
+configura a aplicação.
 
-| Comando | Descrição |
+```toml
+base_url = "https://api.bigballsdata.com"
+max_retries = 3
+
+[timeout]
+connect = 10.0
+read = 60.0
+
+[cache]
+backend = "disk"
+max_entries = 512
+
+[footatoota]
+log_level = "INFO"
+api_log_level = "INFO"
+json_logs = false
+default_sport = "football"
+default_page_size = 200
+```
+
+A precedência é: argumento explícito, depois variável de ambiente, depois o
+arquivo, depois os padrões. As chaves do cliente aceitam o prefixo
+`PITCHSIDE_` e as da aplicação o prefixo `FOOTATOOTA_`.
+
+## Uso
+
+```python
+from footatoota import AppConfig, configure_logging, create_client
+
+configure_logging(AppConfig())
+
+with create_client() as client:
+    table = client.standings.get(league="epl")[0]
+    for row in table.top(5):
+        print(row.rank, row.team_name, row.league_points)
+```
+
+`create_async_client` devolve o equivalente assíncrono. Para inspecionar de
+onde veio cada opção antes de conectar, use `load_settings().explain()`.
+
+O comando `footatoota` verifica a configuração e a conexão, imprimindo a
+procedência de cada opção, o plano da conta e a saúde do serviço:
+
+```bash
+uv run footatoota
+```
+
+O `configure_logging` faz os logs do cliente atravessarem o `structlog`,
+preservando os campos estruturados da API:
+
+```
+[debug] <-- GET /v1/sports 200 in 640ms  elapsed_ms=640 rate_limit=30
+        rate_remaining=29 request_id=5d4ea4a5 status=200 cache=hit
+```
+
+## Desenvolvimento
+
+| Comando | O que faz |
 | --- | --- |
-| `make test-user` | Consulta o usuário autenticado em `/v1/user/me`. |
-| `make test-matches` | Consulta dez partidas de futebol da Premier League. |
-| `make test-player` | Pesquisa Kylian Mbappé e exibe o resultado encontrado. |
-| `make test-team` | Pesquisa o Real Madrid e exibe o resultado encontrado. |
-| `make test-club-matches` | Cruza as partidas do Real Madrid entre EPL, La Liga e Champions. |
-| `make test-api` | Executa todos os smoke tests em sequência. |
+| `make install` | Sincroniza dependências e instala os hooks. |
+| `make format` | Aplica `ruff check --fix` e `ruff format`. |
+| `make lint` | Verifica lint e formatação. |
+| `make typecheck` | Roda o `ty`. |
+| `make test` | Roda a suíte, sem os testes marcados `live`. |
+| `make test-cov` | Roda a suíte com cobertura. |
+| `make check` | Lint, tipos e testes, o mesmo que a CI. |
+| `make clean` | Esvazia o cache em disco do cliente. |
 
-A consulta de partidas aceita `SPORT`, `LEAGUE` e `LIMIT`. Os valores padrão
-são, respectivamente, `football`, `epl` e `10`.
+As respostas HTTP nos testes são simuladas com `respx`. Um teste marcado
+com `@pytest.mark.live` só roda com `uv run pytest -m live` e exige uma
+chave válida.
 
-```bash
-LEAGUE=laliga LIMIT=5 make test-matches
-```
+## Licença
 
-O teste de jogador usa `Kylian Mbappe` por padrão. Use `PLAYER_NAME` para
-pesquisar outro jogador, como Vini Jr ou Lamine Yamal:
+MIT. Ver [LICENSE](LICENSE).
 
-```bash
-PLAYER_NAME="Vinicius" make test-player
-PLAYER_NAME="Lamine Yamal" make test-player
-```
-
-A API não encontra o termo `Vini Jr`; a busca por `Vinicius` retorna Vinícius
-Júnior como primeiro resultado.
-
-O teste de clube percorre a lista paginada de times de futebol, encontra o Real
-Madrid e exibe o resultado. Use `TEAM_NAME` para testar o Barcelona:
-
-```bash
-TEAM_NAME="Barcelona" make test-team
-```
-
-### Partidas de um clube em várias competições
-
-O teste cruzado consulta `/v1/leagues` para validar os códigos das competições,
-busca as partidas de cada liga e unifica os resultados encontrados para o
-clube:
-
-```bash
-make test-club-matches
-```
-
-Por padrão, o teste pesquisa o Real Madrid em `epl`, `laliga` e `ucl`. É
-possível alterar o clube, as competições e a temporada:
-
-```bash
-TEAM_NAME="Barcelona" LEAGUES="laliga ucl" make test-club-matches
-TEAM_NAME="Arsenal" LEAGUES="epl ucl" SEASON=2026 make test-club-matches
-```
-
-As variáveis aceitas são `TEAM_NAME`, `LEAGUES`, `SEASON`, `SPORT` e `LIMIT`.
-Os códigos disponíveis podem ser consultados com
-`GET /v1/leagues?sport=football`.
-
-Quando `SEASON` não é informado, a API escolhe a temporada padrão de cada
-competição de forma independente. Para comparar as mesmas temporadas entre
-ligas, informe `SEASON` explicitamente.
-
-Nos resultados avaliados, `home` e `away` não continham IDs de clube. Por isso,
-o cruzamento usa o nome do time de forma provisória; o ideal para código de
-produção é relacionar as partidas por um identificador estável fornecido pela
-API.
-
-As chamadas de detalhes de jogadores e clubes não fazem parte dos smoke tests,
-pois a API ainda não possui cobertura para os casos avaliados e essas respostas
-foram lentas. Os resultados observados estão registrados em
-[`docs/api-smoke-results.md`](docs/api-smoke-results.md).
-
-Os scripts utilizados pelos comandos estão em [`scripts/smoke`](scripts/smoke).
-
-## Referências para ingestão
-
-O catálogo versionado de códigos de competições está em
-[`config/league-codes.json`](config/league-codes.json). O arquivo contém as 57
-chaves únicas de futebol presentes na referência do provedor, seus aliases e
-observações sobre as diferenças encontradas no endpoint `/v1/leagues`.
-
-Esse catálogo deve ser usado para validar e normalizar o campo `league` durante
-a ingestão. O valor enviado à API deve ser a propriedade `key`; aliases podem
-ser convertidos para a chave canônica antes de persistir os dados.
+[api]: https://bigballsdata.com
+[ci]: https://github.com/phael-exe/foota-toota/actions/workflows/ci.yml
+[ci-badge]: https://github.com/phael-exe/foota-toota/actions/workflows/ci.yml/badge.svg
+[keys]: https://bigballsdata.com/dashboard/keys
+[license]: LICENSE
+[license-badge]: https://img.shields.io/badge/license-MIT-green.svg
+[pitchside]: https://pypi.org/project/pitchside/
+[pre-commit]: https://github.com/pre-commit/pre-commit
+[pre-commit-badge]: https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white
+[python]: https://www.python.org/downloads/
+[python-badge]: https://img.shields.io/badge/python-3.12+-blue.svg
+[ruff]: https://github.com/astral-sh/ruff
+[ruff-badge]: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json
+[uv]: https://github.com/astral-sh/uv
+[uv-badge]: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json

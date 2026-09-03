@@ -1,18 +1,27 @@
-.PHONY: test-user test-matches test-player test-team test-club-matches test-api
+.PHONY: install lint format typecheck test test-cov check clean
 
-test-user:
-	@./scripts/smoke/bbs-user.sh
+install:
+	@uv sync
+	@uv run pre-commit install
 
-test-matches:
-	@./scripts/smoke/bbs-matches.sh
+lint:
+	@uv run ruff check .
+	@uv run ruff format --check .
 
-test-player:
-	@./scripts/smoke/bbs-player.sh
+format:
+	@uv run ruff check --fix .
+	@uv run ruff format .
 
-test-team:
-	@./scripts/smoke/bbs-team.sh
+typecheck:
+	@uv run ty check src/ tests/
 
-test-club-matches:
-	@./scripts/smoke/bbs-club-matches.sh
+test:
+	@uv run pytest
 
-test-api: test-user test-matches test-player test-team test-club-matches
+test-cov:
+	@uv run pytest --cov
+
+check: lint typecheck test
+
+clean:
+	@uv run python -c "import pitchside, shutil; shutil.rmtree(pitchside.default_cache_dir(), ignore_errors=True)"
