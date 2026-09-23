@@ -12,6 +12,11 @@ if [ -f "$ROOT_DIR/.env" ]; then
     set +a
 fi
 
+GCLOUD="${GCLOUD_BIN:-gcloud}"
+if [[ "$GCLOUD" == /* ]]; then
+    export PATH="$(dirname "$GCLOUD"):$PATH"
+fi
+
 PROJECT_ID="${GCP_PROJECT_ID:?GCP_PROJECT_ID não definido no .env}"
 BUCKET="${GCS_BUCKET:?GCS_BUCKET não definido no .env}"
 REGION="${GCP_REGION:-us-central1}"
