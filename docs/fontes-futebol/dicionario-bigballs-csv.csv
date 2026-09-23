@@ -1,0 +1,106 @@
+﻿arquivo_csv,campo_nativo_csv,tipo_bronze,descricao,evidencia_local
+stored_matches.csv,is_finished,STRING,Indicador exportado de encerramento.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,is_live,STRING,Indicador exportado de jogo em andamento.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,starts_in_seconds,STRING,Contagem relativa ao instante da exportação; não é histórico estável.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,status_enum,STRING,Representação enumerada do status; redundante na captura documentada.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,id,STRING,ID da entidade desta tabela na fonte.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,sport,STRING,Modalidade esportiva.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,league,STRING,Código ou referência da liga conforme exportação.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,season,STRING,Temporada declarada no CSV; documentada como vazia na captura de matches.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,home_id,STRING,ID do mandante.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,home_name,STRING,Nome do mandante.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,home_short_name,STRING,Nome curto do mandante.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,home_abbreviation,STRING,Abreviatura do mandante.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,home_logo_url,STRING,URL do escudo do mandante.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,home_flag_url,STRING,URL da bandeira do mandante.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,away_id,STRING,ID do visitante.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,away_name,STRING,Nome do visitante.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,away_short_name,STRING,Nome curto do visitante.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,away_abbreviation,STRING,Abreviatura do visitante.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,away_logo_url,STRING,URL do escudo do visitante.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,away_flag_url,STRING,URL da bandeira do visitante.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,kickoff_utc,STRING,Horário de início expresso em UTC.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,status,STRING,Estado da partida publicado.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,score_home,STRING,Placar do mandante exportado; distinguir regra do placar antes de normalizar.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,score_away,STRING,Placar do visitante exportado; distinguir regra do placar antes de normalizar.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,linescore_home,STRING,Detalhamento do placar por período do mandante; preservar representação original.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,linescore_away,STRING,Detalhamento do placar por período do visitante; preservar representação original.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,attendance,STRING,Público informado; classificação pagante/total não explicitada no DDL.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,broadcast,STRING,Informação de transmissão no formato original.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,has_odds,STRING,Indicador de existência de odds.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,venue,STRING,Local declarado; vazio na captura documentada de matches.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,updated_at,STRING,Atualização da fonte; vazia na captura documentada de matches.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,round,STRING,Rodada publicada.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,winner,STRING,Vencedor declarado; vazio na captura documentada.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,score,STRING,Campo agregado de placar; vazio na captura documentada.,sql/01_bronze/01_create_external_table_stored_matches.sql
+stored_matches.csv,linescore,STRING,Campo agregado de placar por período; vazio na captura documentada.,sql/01_bronze/01_create_external_table_stored_matches.sql
+teams.csv,code,STRING,Código da entidade na fonte.,sql/01_bronze/03_create_external_table_teams.sql
+teams.csv,id,STRING,ID da entidade desta tabela na fonte.,sql/01_bronze/03_create_external_table_teams.sql
+teams.csv,name,STRING,Nome principal publicado.,sql/01_bronze/03_create_external_table_teams.sql
+teams.csv,short_name,STRING,Nome curto.,sql/01_bronze/03_create_external_table_teams.sql
+teams.csv,abbreviation,STRING,Abreviatura.,sql/01_bronze/03_create_external_table_teams.sql
+teams.csv,logo_url,STRING,Endereço do escudo/imagem; licença separada.,sql/01_bronze/03_create_external_table_teams.sql
+teams.csv,flag_url,STRING,Endereço da bandeira/imagem.,sql/01_bronze/03_create_external_table_teams.sql
+teams.csv,sport,STRING,Modalidade esportiva.,sql/01_bronze/03_create_external_table_teams.sql
+teams.csv,league,STRING,Código ou referência da liga conforme exportação.,sql/01_bronze/03_create_external_table_teams.sql
+teams.csv,country,STRING,País na forma textual original.,sql/01_bronze/03_create_external_table_teams.sql
+teams.csv,founded_year,STRING,Ano de fundação.,sql/01_bronze/03_create_external_table_teams.sql
+teams.csv,stats,STRING,Conteúdo agregado de estatísticas no formato da exportação.,sql/01_bronze/03_create_external_table_teams.sql
+leagues.csv,id,STRING,ID da entidade desta tabela na fonte.,sql/01_bronze/05_create_external_table_leagues.sql
+leagues.csv,name,STRING,Nome principal publicado.,sql/01_bronze/05_create_external_table_leagues.sql
+leagues.csv,sport,STRING,Modalidade esportiva.,sql/01_bronze/05_create_external_table_leagues.sql
+leagues.csv,country,STRING,País na forma textual original.,sql/01_bronze/05_create_external_table_leagues.sql
+players.csv,id,STRING,ID da entidade desta tabela na fonte.,sql/01_bronze/07_create_external_table_players.sql
+players.csv,name,STRING,Nome principal publicado.,sql/01_bronze/07_create_external_table_players.sql
+players.csv,full_name,STRING,Nome completo; vazio na captura documentada de players.,sql/01_bronze/07_create_external_table_players.sql
+players.csv,display_name,STRING,Nome de exibição; vazio na captura documentada de players.,sql/01_bronze/07_create_external_table_players.sql
+players.csv,position,STRING,Posição original; silver usa mapa de equivalências.,sql/01_bronze/07_create_external_table_players.sql
+players.csv,jersey_number,STRING,Camisa informada na exportação.,sql/01_bronze/07_create_external_table_players.sql
+players.csv,headshot_url,STRING,Imagem de perfil; direitos separados.,sql/01_bronze/07_create_external_table_players.sql
+players.csv,nationality,STRING,Nacionalidade no formato original.,sql/01_bronze/07_create_external_table_players.sql
+players.csv,date_of_birth,STRING,Nascimento; vazio na captura documentada de players.,sql/01_bronze/07_create_external_table_players.sql
+players.csv,height,STRING,Altura no formato original; vazia na captura documentada.,sql/01_bronze/07_create_external_table_players.sql
+players.csv,height_cm,STRING,Altura em centímetros; vazia na captura documentada.,sql/01_bronze/07_create_external_table_players.sql
+players.csv,weight,STRING,Peso no formato original; vazio na captura documentada.,sql/01_bronze/07_create_external_table_players.sql
+players.csv,weight_kg,STRING,Peso em quilogramas; vazio na captura documentada.,sql/01_bronze/07_create_external_table_players.sql
+players.csv,team_id,STRING,ID da equipe relacionada.,sql/01_bronze/07_create_external_table_players.sql
+players.csv,team_name,STRING,Nome da equipe relacionada.,sql/01_bronze/07_create_external_table_players.sql
+players.csv,league_name,STRING,Nome da liga relacionado ao registro.,sql/01_bronze/07_create_external_table_players.sql
+players.csv,sport,STRING,Modalidade esportiva.,sql/01_bronze/07_create_external_table_players.sql
+stored_matches_h2h.csv,for_match_id,STRING,Partida para a qual o histórico H2H foi solicitado.,sql/01_bronze/09_create_external_table_stored_matches_h2h.sql
+stored_matches_h2h.csv,match_id,STRING,ID da partida descrita nesta linha.,sql/01_bronze/09_create_external_table_stored_matches_h2h.sql
+stored_matches_h2h.csv,date,STRING,Data do confronto histórico.,sql/01_bronze/09_create_external_table_stored_matches_h2h.sql
+stored_matches_h2h.csv,home,STRING,Nome do mandante no confronto.,sql/01_bronze/09_create_external_table_stored_matches_h2h.sql
+stored_matches_h2h.csv,away,STRING,Nome do visitante no confronto.,sql/01_bronze/09_create_external_table_stored_matches_h2h.sql
+stored_matches_h2h.csv,home_score,STRING,Placar do mandante no confronto.,sql/01_bronze/09_create_external_table_stored_matches_h2h.sql
+stored_matches_h2h.csv,away_score,STRING,Placar do visitante no confronto.,sql/01_bronze/09_create_external_table_stored_matches_h2h.sql
+matches_weather.csv,match_id,STRING,ID da partida descrita nesta linha.,sql/01_bronze/11_create_external_table_matches_weather.sql
+matches_weather.csv,kickoff_utc,STRING,Horário de início expresso em UTC.,sql/01_bronze/11_create_external_table_matches_weather.sql
+matches_weather.csv,venue_name,STRING,Nome do local meteorológico associado à partida.,sql/01_bronze/11_create_external_table_matches_weather.sql
+matches_weather.csv,latitude,STRING,Latitude do local.,sql/01_bronze/11_create_external_table_matches_weather.sql
+matches_weather.csv,longitude,STRING,Longitude do local.,sql/01_bronze/11_create_external_table_matches_weather.sql
+matches_weather.csv,roof,STRING,Informação sobre cobertura/teto no formato original.,sql/01_bronze/11_create_external_table_matches_weather.sql
+matches_weather.csv,temperature_c,STRING,Temperatura em graus Celsius.,sql/01_bronze/11_create_external_table_matches_weather.sql
+matches_weather.csv,apparent_temperature_c,STRING,Sensação térmica em graus Celsius.,sql/01_bronze/11_create_external_table_matches_weather.sql
+matches_weather.csv,relative_humidity_pct,STRING,Umidade relativa em percentual.,sql/01_bronze/11_create_external_table_matches_weather.sql
+matches_weather.csv,precipitation_mm,STRING,Precipitação em milímetros; janela precisa ser confirmada.,sql/01_bronze/11_create_external_table_matches_weather.sql
+matches_weather.csv,wind_kph,STRING,Velocidade do vento em km/h.,sql/01_bronze/11_create_external_table_matches_weather.sql
+matches_weather.csv,wind_gust_kph,STRING,Rajada de vento em km/h.,sql/01_bronze/11_create_external_table_matches_weather.sql
+matches_weather.csv,cloud_cover_pct,STRING,Cobertura de nuvens em percentual.,sql/01_bronze/11_create_external_table_matches_weather.sql
+matches_weather.csv,condition,STRING,Condição meteorológica descrita.,sql/01_bronze/11_create_external_table_matches_weather.sql
+matches_events.csv,match_id,STRING,ID da partida descrita nesta linha.,sql/01_bronze/13_create_external_table_matches_events.sql
+matches_events.csv,team,STRING,Referência de equipe no evento; não assumir que seja ID sem inspecionar o payload.,sql/01_bronze/13_create_external_table_matches_events.sql
+matches_events.csv,player_name,STRING,Nome do atleta principal.,sql/01_bronze/13_create_external_table_matches_events.sql
+matches_events.csv,assist_name,STRING,Nome de quem deu assistência quando presente.,sql/01_bronze/13_create_external_table_matches_events.sql
+matches_events.csv,event_type,STRING,Tipo de evento; o comentário local registra apenas Goal nesta captura.,sql/01_bronze/13_create_external_table_matches_events.sql
+matches_events.csv,event_detail,STRING,Detalhamento original do evento.,sql/01_bronze/13_create_external_table_matches_events.sql
+matches_events.csv,elapsed,STRING,Minuto do evento.,sql/01_bronze/13_create_external_table_matches_events.sql
+matches_events.csv,elapsed_extra,STRING,Minutos de acréscimo explícitos.,sql/01_bronze/13_create_external_table_matches_events.sql
+stored_matches_stats_players.csv,match_id,STRING,ID da partida descrita nesta linha.,sql/01_bronze/15_create_external_table_stored_matches_stats_players.sql
+stored_matches_stats_players.csv,team_id,STRING,ID da equipe relacionada.,sql/01_bronze/15_create_external_table_stored_matches_stats_players.sql
+stored_matches_stats_players.csv,team_name,STRING,Nome da equipe relacionada.,sql/01_bronze/15_create_external_table_stored_matches_stats_players.sql
+stored_matches_stats_players.csv,player_id,STRING,ID do atleta.,sql/01_bronze/15_create_external_table_stored_matches_stats_players.sql
+stored_matches_stats_players.csv,player_name,STRING,Nome do atleta principal.,sql/01_bronze/15_create_external_table_stored_matches_stats_players.sql
+stored_matches_stats_players.csv,position,STRING,Posição original; silver usa mapa de equivalências.,sql/01_bronze/15_create_external_table_stored_matches_stats_players.sql
+stored_matches_stats_players.csv,jersey_number,STRING,Camisa informada na exportação.,sql/01_bronze/15_create_external_table_stored_matches_stats_players.sql
+stored_matches_stats_players.csv,stats_json,STRING,JSON serializado de métricas por jogador; desdobrado na silver.,sql/01_bronze/15_create_external_table_stored_matches_stats_players.sql

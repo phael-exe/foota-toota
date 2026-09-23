@@ -226,4 +226,4 @@ data/
 .env
 *.zip
 # BigQuery script output
-sql/out/
+sql/
