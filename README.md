@@ -12,6 +12,14 @@ resultado das partidas da Premier League com BigQuery ML.
 [![Ruff][ruff-badge]][ruff]
 [![pre-commit][pre-commit-badge]][pre-commit]
 
+## Catálogo de fontes de futebol
+
+O [levantamento de fontes](docs/fontes-futebol/README.md) reúne 129 fontes,
+produtos e coleções para partidas, notícias, jogadores, transferências e
+outros dados. Inclui fichas com evidências e limitações, exportações CSV/JSON,
+um dicionário normalizado proposto e os campos dos CSVs já usados pelo
+projeto. Candidatos pendentes de validação estão identificados.
+
 ## Requisitos
 
 - Python 3.12 ou superior
