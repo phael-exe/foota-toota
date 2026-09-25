@@ -89,7 +89,7 @@ fduk_matches AS (
         CONCAT(COALESCE(HTAG, ''), '-', COALESCE(HTHG, '')) AS linescore_away,
         CAST(NULL AS INT64) AS attendance,
         CAST(NULL AS STRING) AS round,
-        IF(B365H IS NOT NULL OR PSH IS NOT NULL, TRUE, FALSE) AS has_odds,
+        IF(B365H IS NOT NULL, TRUE, FALSE) AS has_odds,
         Date AS kickoff_raw,
         FTHG AS score_home_raw,
         FTAG AS score_away_raw,
@@ -162,16 +162,19 @@ fdorg_matches AS (
         JSON_VALUE(awayTeam, '$.name') AS away_team_name,
         SAFE_CAST(utcDate AS TIMESTAMP) AS kickoff_utc,
         EXTRACT(YEAR FROM SAFE_CAST(utcDate AS TIMESTAMP)) AS season,
-        LOWER(status) AS status,
-        SAFE_CAST(JSON_VALUE(score, '$.fullTime.home') AS INT64) AS score_home,
-        SAFE_CAST(JSON_VALUE(score, '$.fullTime.away') AS INT64) AS score_away,
-        CASE JSON_VALUE(score, '$.winner')
-            WHEN 'HOME_TEAM' THEN 'home'
-            WHEN 'DRAW'      THEN 'draw'
-            WHEN 'AWAY_TEAM' THEN 'away'
+        CASE LOWER(status)
+            WHEN 'timed' THEN 'scheduled'
+            ELSE LOWER(status)
+        END AS status,
+        IF(LOWER(status) = 'finished', SAFE_CAST(JSON_VALUE(score, '$.fullTime.home') AS INT64), NULL) AS score_home,
+        IF(LOWER(status) = 'finished', SAFE_CAST(JSON_VALUE(score, '$.fullTime.away') AS INT64), NULL) AS score_away,
+        CASE
+            WHEN LOWER(status) = 'finished' AND JSON_VALUE(score, '$.winner') = 'HOME_TEAM' THEN 'home'
+            WHEN LOWER(status) = 'finished' AND JSON_VALUE(score, '$.winner') = 'DRAW'      THEN 'draw'
+            WHEN LOWER(status) = 'finished' AND JSON_VALUE(score, '$.winner') = 'AWAY_TEAM' THEN 'away'
         END AS outcome,
-        CONCAT(COALESCE(JSON_VALUE(score, '$.halfTime.home'), ''), '-', COALESCE(JSON_VALUE(score, '$.halfTime.away'), '')) AS linescore_home,
-        CONCAT(COALESCE(JSON_VALUE(score, '$.halfTime.away'), ''), '-', COALESCE(JSON_VALUE(score, '$.halfTime.home'), '')) AS linescore_away,
+        IF(LOWER(status) = 'finished', CONCAT(COALESCE(JSON_VALUE(score, '$.halfTime.home'), ''), '-', COALESCE(JSON_VALUE(score, '$.halfTime.away'), '')), NULL) AS linescore_home,
+        IF(LOWER(status) = 'finished', CONCAT(COALESCE(JSON_VALUE(score, '$.halfTime.away'), ''), '-', COALESCE(JSON_VALUE(score, '$.halfTime.home'), '')), NULL) AS linescore_away,
         CAST(NULL AS INT64) AS attendance,
         CAST(matchday AS STRING) AS round,
         FALSE AS has_odds,
