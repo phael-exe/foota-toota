@@ -110,9 +110,9 @@ cd sql
 | Pasta | O que cria |
 | --- | --- |
 | `00_setup` | Datasets `bronze`, `silver`, `gold`, `quality`; UDF `blank_to_null`. |
-| `01_bronze` | Oito tabelas externas sobre o bucket e suas cópias com `batch_id`, `ingested_at` e `source_file`. |
-| `02_silver` | Tipos, chaves e deduplicação: `matches`, `teams`, `team_matches`, `h2h`, etc. |
-| `03_silver_checks` | Regras S1 a S15 como `ASSERT`; quarentenas em `quality.occurrences`. |
+| `01_bronze` | Tabelas externas e nativas para multi-ligas, transferências, FPL, avaliações de mercado, notícias e BBD. |
+| `02_silver` | Modelo canônico: `matches`, `teams`, `players`, `valuations`, `transfers`, `gameweeks`, `odds`, `stats`, `news`. |
+| `03_silver_checks` | Regras S1 a S19 como `ASSERT` bloqueantes; quarentenas em `quality.occurrences`. |
 | `04_gold` | `match_features`: 15 atributos por partida, só de jogos anteriores ao kickoff. |
 | `05_gold_checks` | Regras G1 a G5, incluindo a prova de zero vazamento temporal. |
 | `06_model` | Regressão logística, árvore (`BOOSTED_TREE_CLASSIFIER`) e dois regressores de gols. |
