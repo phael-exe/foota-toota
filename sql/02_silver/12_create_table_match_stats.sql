@@ -7,7 +7,7 @@ SELECT
            REGEXP_REPLACE(COALESCE(HomeTeam, ''), '[^a-zA-Z0-9]', ''), '_',
            REGEXP_REPLACE(COALESCE(AwayTeam, ''), '[^a-zA-Z0-9]', '')) AS match_id,
     SAFE_CAST(HS AS INT64) AS home_shots,
-    SAFE_CAST(AS AS INT64) AS away_shots,
+    SAFE_CAST(`AS` AS INT64) AS away_shots,
     SAFE_CAST(HST AS INT64) AS home_shots_on_target,
     SAFE_CAST(AST AS INT64) AS away_shots_on_target,
     SAFE_CAST(HF AS INT64) AS home_fouls,

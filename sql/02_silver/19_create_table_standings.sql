@@ -4,11 +4,11 @@
 CREATE OR REPLACE TABLE `PROJECT.silver.standings` AS
 WITH unnested AS (
     SELECT
-        JSON_VALUE(competition, '$.code') AS competition_code,
-        JSON_VALUE(competition, '$.name') AS competition_name,
-        JSON_VALUE(season, '$.startDate') AS season_start_date,
-        JSON_VALUE(season, '$.endDate') AS season_end_date,
-        SAFE_CAST(JSON_VALUE(season, '$.currentMatchday') AS INT64) AS current_matchday,
+        _competition_code AS competition_code,
+        _competition_name AS competition_name,
+        JSON_VALUE(_season, '$.startDate') AS season_start_date,
+        JSON_VALUE(_season, '$.endDate') AS season_end_date,
+        SAFE_CAST(JSON_VALUE(_season, '$.currentMatchday') AS INT64) AS current_matchday,
         SAFE_CAST(JSON_VALUE(entry, '$.position') AS INT64) AS rank,
         CAST(JSON_VALUE(entry, '$.team.id') AS STRING) AS team_id,
         JSON_VALUE(entry, '$.team.name') AS team_name,

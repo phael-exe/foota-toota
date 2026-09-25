@@ -1,15 +1,14 @@
 -- Player market valuations time series fact table (656k+ valuation snapshots).
 -- Sourced from Transfermarkt historical dataset.
--- Partitioned by date, clustered by player_id, current_club_id.
+-- Partitioned by valuation_date, clustered by player_id, current_club_id.
 
 CREATE OR REPLACE TABLE `PROJECT.silver.player_valuations`
-PARTITION BY valuation_date
+PARTITION BY DATE_TRUNC(valuation_date, MONTH)
 CLUSTER BY player_id, current_club_id AS
 SELECT
     SAFE_CAST(player_id AS INT64) AS player_id,
     SAFE_CAST(date AS DATE) AS valuation_date,
     SAFE_CAST(market_value_in_eur AS FLOAT64) AS market_value_eur,
-    `PROJECT.silver.blank_to_null`(current_club_name) AS current_club_name,
     SAFE_CAST(current_club_id AS INT64) AS current_club_id,
     LOWER(`PROJECT.silver.blank_to_null`(player_club_domestic_competition_id)) AS competition_id,
     batch_id,

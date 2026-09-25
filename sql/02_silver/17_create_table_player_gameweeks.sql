@@ -9,7 +9,7 @@ SELECT
     `PROJECT.silver.blank_to_null`(name) AS player_name,
     `PROJECT.silver.blank_to_null`(position) AS position,
     `PROJECT.silver.blank_to_null`(team) AS team,
-    `PROJECT.silver.blank_to_null`(season) AS season,
+    COALESCE(REGEXP_EXTRACT(source_file, r'season=([^/]+)'), '2024-25') AS season,
     SAFE_CAST(`PROJECT.silver.blank_to_null`(round) AS INT64) AS gameweek,
     SAFE.PARSE_TIMESTAMP('%Y-%m-%dT%H:%M:%SZ', kickoff_time) AS kickoff_time,
     SAFE_CAST(`PROJECT.silver.blank_to_null`(minutes) AS INT64) AS minutes_played,

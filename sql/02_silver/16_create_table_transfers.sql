@@ -3,7 +3,7 @@
 -- Partitioned by transfer_date, clustered by player_id, to_club_id.
 
 CREATE OR REPLACE TABLE `PROJECT.silver.transfers`
-PARTITION BY transfer_date
+PARTITION BY DATE_TRUNC(transfer_date, YEAR)
 CLUSTER BY player_id, to_club_id AS
 SELECT
     GENERATE_UUID() AS transfer_id,
