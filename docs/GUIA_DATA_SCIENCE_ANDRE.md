@@ -41,7 +41,38 @@ Elas já passaram por 23 regras de qualidade (placar não-nulo em jogos encerrad
 
 ---
 
-## 🔬 3. Dados para Feature Engineering Avançada & Ratings
+## 🏆 3. Camada Gold: Feature Stores Prontas para Treino Imediato
+
+Se você não quiser calcular agregações temporais e janelas móveis manualmente, a **Camada Gold** já entrega datasets 100% vetorizados, auditados contra *data leakage* e com splits temporais prontos:
+
+### A. Feature Store do Brasileirão
+- **Tabela**: `pdm-bia-505511.gold.match_features_brasileirao`
+- **Volume**: **8.888 partidas**
+  - **`TRAIN`**: 8.529 jogos com histórico completo e label
+  - **`EVAL`**: 256 jogos
+  - **`PREDICT`**: 102 jogos futuros agendados
+
+### B. Feature Store da Premier League (EPL)
+- **Tabela**: `pdm-bia-505511.gold.match_features_epl`
+- **Volume**: **5.269 partidas**
+  - **`TRAIN`**: 3.799 jogos com histórico completo e label
+  - **`EVAL`**: 380 jogos (temporada 2024/2025)
+  - **`TEST`**: 410 jogos (temporada 2025/2026)
+  - **`PREDICT`**: 680 jogos futuros agendados
+
+### Features Pré-computadas disponíveis na Gold:
+- **Forma Mandante/Visitante**: `home_avg_points_last_5`, `away_avg_points_last_5`, `diff_avg_points_last_5`
+- **Poder Ofensivo/Defensivo**: `home_avg_goals_for_last_5`, `away_avg_goals_for_last_5`, `diff_avg_goals_for_last_5`, `home_avg_goals_against_last_5`, `away_avg_goals_against_last_5`
+- **Forma na Temporada**: `home_avg_points_season`, `away_avg_points_season`, `diff_avg_points_season`
+- **Fadiga / Descanso**: `home_rest_days`, `away_rest_days` (dias desde a última partida oficial)
+- **Confronto Direto (H2H)**: `h2h_avg_points_last_5` (aproveitamento nos últimos 5 embates entre os dois)
+- **Rótulo Alvo**: `label_outcome` (`home`, `draw`, `away`)
+- **Partição de Modelagem**: `split_set` (`TRAIN`, `EVAL`, `TEST`, `PREDICT`)
+- **Auditoria Anti-Leakage**: Arrays `home_history_match_ids` e `away_history_match_ids` comprovando que nenhum jogo futuro entrou nas métricas.
+
+---
+
+## 🔬 4. Dados Complementares para Novas Features & Ratings
 
 Quando você validar a baseline da PoC e quiser incrementar o poder preditivo com novas features, utilize estas tabelas complementares:
 
@@ -101,12 +132,36 @@ query = """
 df = client.query(query).to_dataframe()
 print(f"Dataset carregado: {df.shape[0]} partidas.")
 
-# Recomendação de Split Temporal (Sem vazamento de futuro):
-train_df = df[df["season"] <= 2023]
-val_df   = df[df["season"] == 2024]
-test_df  = df[df["season"] >= 2025]
+# Opção 1: Treinar direto a partir da Feature Store Gold (Já vetorizada com todas as features):
+query_gold = """
+    SELECT 
+        diff_avg_points_last_5,
+        diff_avg_goals_for_last_5,
+        diff_avg_goals_against_last_5,
+        diff_avg_points_season,
+        home_rest_days,
+        away_rest_days,
+        h2h_avg_points_last_5,
+        split_set,
+        label_outcome
+    FROM `pdm-bia-505511.gold.match_features_brasileirao`
+    WHERE has_full_history = TRUE
+"""
+df_gold = client.query(query_gold).to_dataframe()
 
-print(f"Treino: {len(train_df)} | Validação: {len(val_df)} | Teste: {len(test_df)}")
+train = df_gold[df_gold["split_set"] == "TRAIN"]
+eval_set = df_gold[df_gold["split_set"] == "EVAL"]
+
+features = [
+    "diff_avg_points_last_5", "diff_avg_goals_for_last_5",
+    "diff_avg_goals_against_last_5", "diff_avg_points_season",
+    "home_rest_days", "away_rest_days"
+]
+
+X_train, y_train = train[features], train["label_outcome"]
+X_eval, y_eval = eval_set[features], eval_set["label_outcome"]
+print(f"Treino Gold pronto: {len(X_train)} amostras | Avaliação: {len(X_eval)} amostras")
+
 ```
 
 ### Exemplo de Query com Engenharia de Forma Recente no SQL:
