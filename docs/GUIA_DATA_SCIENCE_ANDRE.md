@@ -1,194 +1,195 @@
 # 🧠 Foota Toota — Guia de Dados para Data Science & Machine Learning
 **Destinatário:** André (BIA UFG)  
 **Projeto GCP:** `pdm-bia-505511`  
-**Dataset Silver:** `pdm-bia-505511.silver`  
+**Dataset Gold (Feature Stores):** `pdm-bia-505511.gold`  
+**Dataset Silver (Dados Conformed):** `pdm-bia-505511.silver`  
 **Bucket GCS:** `gs://foota-toota-505511/`
 
 ---
 
 ## 🎯 1. Estratégia de Prova de Conceito (PoC Isolada)
 
-Para atender à necessidade de **validar o pipeline de ponta a ponta com uma única liga por vez** (sem ruído ou data leakage cross-league), foram criadas **duas tabelas físicas isoladas e tratadas** prontas para modelagem.
+Para validar o pipeline preditivo de ponta a ponta **sem ruído ou vazamento de dados cross-league**, separamos os dados em duas ligas isoladas:
+1. **Campeonato Brasileiro Série A** (`brasileirao_serie_a`)
+2. **Premier League Inglesa** (`epl`)
 
-Elas já passaram por 23 regras de qualidade (placar não-nulo em jogos encerrados, placar nulo em jogos futuros, chaves primárias únicas e datas normalizadas em UTC).
-
----
-
-## 📋 2. Tabelas de Partidas para a PoC
-
-### A. Campeonato Brasileiro Série A
-- **Tabela**: `pdm-bia-505511.silver.matches_brasileirao`
-- **Volume**: **8.888 partidas** (Temporadas 2003 a 2026)
-  - **8.785 jogos finalizados** (com histórico de placares para treino e validação).
-  - **102 jogos agendados para 2026** (para inferência e predição cega).
-- **Esquema Principal**:
-  - `match_id` (STRING): Identificador único do confronto.
-  - `kickoff_utc` (TIMESTAMP): Data e horário do jogo em UTC.
-  - `season` (INT64): Ano da temporada (2003 a 2026).
-  - `round` (STRING): Rodada do campeonato (ex: `'1'` a `'38'`).
-  - `home_team_id` / `away_team_id` (STRING): IDs padronizados dos clubes.
-  - `home_team_name` / `away_team_name` (STRING): Nomes dos clubes mandante e visitante.
-  - `score_home` / `score_away` (INT64): Gols marcados por mandante e visitante.
-  - `outcome` (STRING): Alvo da classificação (`'home'`, `'draw'`, `'away'`).
-  - `status` (STRING): `'finished'` ou `'scheduled'`.
-
-### B. Premier League Inglesa (EPL)
-- **Tabela**: `pdm-bia-505511.silver.matches_epl`
-- **Volume**: **5.269 partidas** (Temporadas 2014 a 2026)
-  - **4.589 jogos finalizados** com placar e estatísticas.
-  - **680 jogos agendados/recentes**.
-- **Esquema**: Idêntico ao do Brasileirão (permitindo reutilizar 100% do código de engenharia de features entre ligas).
+Você tem duas formas de trabalhar:
+- **Caminho Expresso (Recomendado)**: Consumir diretamente a **Camada Gold**, onde as features temporais (forma recente, gols, descanso, H2H e splits de treino/teste) já estão **vetorizadas e prontas para treino**.
+- **Caminho Customizado**: Consumir a **Camada Silver** para construir suas próprias features, janelas móveis ou modelos não-convencionais (NLP em notícias, ratings ELO customizados, etc.).
 
 ---
 
-## 🏆 3. Camada Gold: Feature Stores Prontas para Treino Imediato
+## 🏆 2. Camada Gold: Feature Stores Prontas para Machine Learning
 
-Se você não quiser calcular agregações temporais e janelas móveis manualmente, a **Camada Gold** já entrega datasets 100% vetorizados, auditados contra *data leakage* e com splits temporais prontos:
+A camada Gold resolve o problema mais trabalhoso da modelagem de futebol: **engenharia de janelas móveis sem data leakage**. Cada linha representa uma partida, e todas as métricas foram calculadas utilizando **estritamente partidas encerradas anteriores ao kickoff**.
 
-### A. Feature Store do Brasileirão
-- **Tabela**: `pdm-bia-505511.gold.match_features_brasileirao`
-- **Volume**: **8.888 partidas**
-  - **`TRAIN`**: 8.529 jogos com histórico completo e label
-  - **`EVAL`**: 256 jogos
-  - **`PREDICT`**: 102 jogos futuros agendados
+### 📋 Tabelas Gold Dedicadas por Liga
 
-### B. Feature Store da Premier League (EPL)
-- **Tabela**: `pdm-bia-505511.gold.match_features_epl`
-- **Volume**: **5.269 partidas**
-  - **`TRAIN`**: 3.799 jogos com histórico completo e label
-  - **`EVAL`**: 380 jogos (temporada 2024/2025)
-  - **`TEST`**: 410 jogos (temporada 2025/2026)
-  - **`PREDICT`**: 680 jogos futuros agendados
+#### A. Feature Store do Brasileirão Série A
+- **Tabela BigQuery**: `pdm-bia-505511.gold.match_features_brasileirao`
+- **Volume Total**: **8.888 partidas** (Temporadas 2003 a 2026)
+  - **`TRAIN`**: **8.529 jogos** (2003 a junho/2024) com histórico completo de 5 jogos e rótulo.
+  - **`EVAL`**: **256 jogos** (julho/2024 a maio/2025) para validação fora da amostra de tempo.
+  - **`PREDICT`**: **102 jogos agendados para 2026** (para inferência e testes cegos em produção).
 
-### Features Pré-computadas disponíveis na Gold:
-- **Forma Mandante/Visitante**: `home_avg_points_last_5`, `away_avg_points_last_5`, `diff_avg_points_last_5`
-- **Poder Ofensivo/Defensivo**: `home_avg_goals_for_last_5`, `away_avg_goals_for_last_5`, `diff_avg_goals_for_last_5`, `home_avg_goals_against_last_5`, `away_avg_goals_against_last_5`
-- **Forma na Temporada**: `home_avg_points_season`, `away_avg_points_season`, `diff_avg_points_season`
-- **Fadiga / Descanso**: `home_rest_days`, `away_rest_days` (dias desde a última partida oficial)
-- **Confronto Direto (H2H)**: `h2h_avg_points_last_5` (aproveitamento nos últimos 5 embates entre os dois)
-- **Rótulo Alvo**: `label_outcome` (`home`, `draw`, `away`)
-- **Partição de Modelagem**: `split_set` (`TRAIN`, `EVAL`, `TEST`, `PREDICT`)
-- **Auditoria Anti-Leakage**: Arrays `home_history_match_ids` e `away_history_match_ids` comprovando que nenhum jogo futuro entrou nas métricas.
+#### B. Feature Store da Premier League (EPL)
+- **Tabela BigQuery**: `pdm-bia-505511.gold.match_features_epl`
+- **Volume Total**: **5.269 partidas** (Temporadas 2014 a 2026)
+  - **`TRAIN`**: **3.799 jogos** (2014 a junho/2024).
+  - **`EVAL`**: **380 jogos** (temporada 2024/2025 completa).
+  - **`TEST`**: **410 jogos** (temporada 2025/2026).
+  - **`PREDICT`**: **680 jogos agendados/recentes** para previsão.
 
 ---
 
-## 🔬 4. Dados Complementares para Novas Features & Ratings
+### 📊 Dicionário de Colunas da Feature Store Gold
 
-Quando você validar a baseline da PoC e quiser incrementar o poder preditivo com novas features, utilize estas tabelas complementares:
-
-### 1. Visão Bilateral para Cálculo de Forma (`silver.team_matches`)
-- **Tabela**: `pdm-bia-505511.silver.team_matches` (50.886 linhas — 2 linhas por jogo).
-- **Para que serve**: Permite calcular com funções de janela (`OVER (PARTITION BY team_id ORDER BY kickoff_utc ROWS BETWEEN 5 PRECEDING AND 1 PRECEDING)`) o aproveitamento recente do time, média de gols marcados/sofridos nos últimos N jogos, sequências de vitórias e descanso em dias, **sem risco de vazamento temporal**.
-
-### 2. Histórico de Confrontos Diretos (`silver.h2h`)
-- **Tabela**: `pdm-bia-505511.silver.h2h` (11.790 registros).
-- **Garantia Anti-Leakage**: Auditada pela regra `G2` — contém apenas encontros **estritamente anteriores** à data da partida a ser prevista.
-
-### 3. Cotações e Probabilidades de Mercado (`silver.match_odds`)
-- **Tabela**: `pdm-bia-505511.silver.match_odds` (10.433 jogos).
-- **Conteúdo**: Odds Bet365 e Pinnacle (`bet365_home_win`, `bet365_draw`, `bet365_away_win`).
-- **Uso em ML**:
-  - Baseline de benchmark (o modelo de ML bate as probabilidades implícitas das casas?).
-  - Target Calibration e cálculo de Valor Esperado (+EV) para apostas de valor.
-
-### 4. Força Econômica do Elenco via Transfermarkt
-- **`silver.player_valuations`**: 656.301 avaliações de valor de mercado (€).
-- **`silver.transfers`**: 175.165 registros de transferências e compras.
-- **Uso em ML**: Agregar o valor de mercado total dos 11 titulares ou do elenco como proxy contínuo da qualidade técnica da equipe.
-
-### 5. Notícias e NLP / Sentimento Pré-Jogo (`silver.news_articles`)
-- **Tabela**: `pdm-bia-505511.silver.news_articles` (783 notícias completas).
-- **Conteúdo**: Título, texto integral higienizado, portal (*ge*, *BBC Sport*, etc.) e data de publicação.
-- **Uso em ML**: Extração de sentimento, identificação de desfalques/lesões ou pressão sobre o técnico via LLM/embeddings antes da partida.
+| Coluna | Tipo | Descrição |
+| :--- | :--- | :--- |
+| `match_id` | STRING | Identificador único do jogo (ex: `bra_1001` ou `fduk_E0_...`). |
+| `league_id` | STRING | Código canônico da liga (`'brasileirao_serie_a'` ou `'epl'`). |
+| `kickoff_utc` | TIMESTAMP | Data e horário da partida em UTC. |
+| `home_team_id` / `away_team_id` | STRING | IDs normalizados dos clubes mandante e visitante. |
+| `home_avg_points_last_5` | FLOAT64 | Média de pontos (0 a 3) do mandante nos últimos 5 jogos da liga. |
+| `away_avg_points_last_5` | FLOAT64 | Média de pontos (0 a 3) do visitante nos últimos 5 jogos da liga. |
+| `diff_avg_points_last_5` | FLOAT64 | **Diferencial de Forma**: `home_avg_points_last_5 - away_avg_points_last_5`. |
+| `home_avg_goals_for_last_5` | FLOAT64 | Média de gols marcados pelo mandante nos últimos 5 jogos. |
+| `away_avg_goals_for_last_5` | FLOAT64 | Média de gols marcados pelo visitante nos últimos 5 jogos. |
+| `diff_avg_goals_for_last_5` | FLOAT64 | **Diferencial Ofensivo**: `home_goals - away_goals`. |
+| `home_avg_goals_against_last_5` | FLOAT64 | Média de gols sofridos pelo mandante nos últimos 5 jogos. |
+| `away_avg_goals_against_last_5` | FLOAT64 | Média de gols sofridos pelo visitante nos últimos 5 jogos. |
+| `home_avg_points_season` | FLOAT64 | Aproveitamento de pontos acumulado do mandante na temporada atual. |
+| `away_avg_points_season` | FLOAT64 | Aproveitamento de pontos acumulado do visitante na temporada atual. |
+| `diff_avg_points_season` | FLOAT64 | **Diferencial de Temporada**: `home_season - away_season`. |
+| `home_rest_days` | INT64 | Dias de descanso do mandante desde a última partida (limitado a 60). |
+| `away_rest_days` | INT64 | Dias de descanso do visitante desde a última partida (limitado a 60). |
+| `h2h_avg_points_last_5` | FLOAT64 | Pontos conquistados pelo mandante contra este mesmo adversário nos últimos 5 confrontos diretos. |
+| `has_full_history` | BOOL | `TRUE` se ambos os times já possuem histórico de pelo menos 5 jogos anteriores. |
+| **`label_outcome`** | STRING | **Target**: `'home'`, `'draw'` ou `'away'` (`NULL` em jogos agendados). |
+| **`split_set`** | STRING | **Divisão Temporal**: `'TRAIN'`, `'EVAL'`, `'TEST'` ou `'PREDICT'`. |
+| `home_history_match_ids` | ARRAY<STRING> | IDs dos jogos que entraram na média do mandante (Auditoria anti-leakage). |
+| `away_history_match_ids` | ARRAY<STRING> | IDs dos jogos que entraram na média do visitante (Auditoria anti-leakage). |
 
 ---
 
-## 🐍 4. Como Carregar em Python (Pandas / Scikit-Learn)
+## 🛡️ 3. Garantias Anti-Data Leakage (Suíte `sql/05_gold_checks`)
 
-### Instalação:
+As tabelas Gold foram auditadas por testes determinísticos no BigQuery:
+- **Regra G1 (`no_future_history`)**: Nenhuma feature temporal pode conter partidas com kickoff posterior ou igual ao do jogo atual.
+- **Regra G2 (`h2h_strictly_earlier`)**: Confrontos diretos históricos são estritamente anteriores.
+- **Regra G3 (`no_snapshot_columns`)**: Colunas de classificação geral ou tabelas estáticas não foram misturadas com o fato de partidas.
+- **Regra G4 (`label_matches_status`)**: `label_outcome` só existe para jogos `finished`.
+- **Regra G5 (`home_share`)**: Proporção histórica validada (46.3% vitórias mandantes, 28.3% visitantes, 25.4% empates).
+
+---
+
+## 🔬 4. Camada Silver: Dados Conformed para Features Customizadas
+
+Se você quiser criar features além das já existentes na Gold, utilize as tabelas da Silver:
+
+| Tabela Silver | Registros | O que contém | Oportunidade de Modelagem |
+| :--- | :--- | :--- | :--- |
+| `silver.matches_brasileirao` | **8.888** | Partidas limpas do Brasileirão com placares e rodadas. | Modelos de séries temporais ou Poisson de gols. |
+| `silver.matches_epl` | **5.269** | Partidas da Premier League com placares e públicos. | Modelos comparativos e cross-league. |
+| `silver.team_matches` | **50.886** | Visão bilateral (2 linhas/partida: mandante e visitante). | Janelas móveis customizadas (ex: últimos 3 jogos, apenas jogos em casa). |
+| `silver.match_odds` | **10.433** | Cotações pré-jogo (Bet365, Pinnacle). | Benchmark de probabilidades implícitas e cálculo de Valor Esperado (+EV). |
+| `silver.player_valuations` | **656.301** | Valor de mercado histórico de atletas em EUR (Transfermarkt). | Proxy da força financeira/qualidade do elenco. |
+| `silver.transfers` | **175.165** | Compras/vendas de jogadores e valores pagos. | Taxa de renovação do elenco e investimento recente. |
+| `silver.news_articles` | **783** | Notícias esportivas completas (*ge*, *BBC*, *ESPN*). | Features de NLP (análise de sentimento pré-jogo, desfalques, pressão no técnico). |
+| `silver.player_gameweeks` | **109.282** | Desempenho semanal no Fantasy Premier League (xG, xA, minutos). | Impacto de ausência de jogadores-chave. |
+
+---
+
+## 🐍 5. Código Pronto em Python (Treino e Predição na Gold)
+
+### Instalação de dependências:
 ```bash
-pip install google-cloud-bigquery pandas db-dtypes scikit-learn
+pip install google-cloud-bigquery pandas scikit-learn db-dtypes
 ```
 
-### Script de Carregamento e Split Temporal:
+### Script de Treino Completo (Baseline para a PoC):
 ```python
 from google.cloud import bigquery
 import pandas as pd
+from sklearn.ensemble import HistGradientBoostingClassifier
+from sklearn.metrics import classification_report, accuracy_score, log_loss
 
+# 1. Conexão ao BigQuery
 client = bigquery.Client(project="pdm-bia-505511")
 
-# Puxar dataset do Brasileirão para a PoC
+# 2. Carregar a Feature Store Gold do Brasileirão
 query = """
     SELECT 
-        match_id, kickoff_utc, season, round,
-        home_team_id, away_team_id,
-        home_team_name, away_team_name,
-        score_home, score_away, outcome, status
-    FROM `pdm-bia-505511.silver.matches_brasileirao`
-    WHERE status = 'finished'
-    ORDER BY kickoff_utc ASC
-"""
-
-df = client.query(query).to_dataframe()
-print(f"Dataset carregado: {df.shape[0]} partidas.")
-
-# Opção 1: Treinar direto a partir da Feature Store Gold (Já vetorizada com todas as features):
-query_gold = """
-    SELECT 
+        match_id, kickoff_utc, home_team_name, away_team_name,
+        -- Features de Forma e Gols
         diff_avg_points_last_5,
+        home_avg_points_last_5,
+        away_avg_points_last_5,
         diff_avg_goals_for_last_5,
-        diff_avg_goals_against_last_5,
+        home_avg_goals_for_last_5,
+        away_avg_goals_for_last_5,
         diff_avg_points_season,
+        -- Descanso e H2H
         home_rest_days,
         away_rest_days,
-        h2h_avg_points_last_5,
+        COALESCE(h2h_avg_points_last_5, 1.0) AS h2h_points,
+        -- Partição e Rótulo
         split_set,
         label_outcome
     FROM `pdm-bia-505511.gold.match_features_brasileirao`
-    WHERE has_full_history = TRUE
+    WHERE has_full_history = TRUE OR split_set = 'PREDICT'
+    ORDER BY kickoff_utc ASC
 """
-df_gold = client.query(query_gold).to_dataframe()
+df = client.query(query).to_dataframe()
+print(f"Total de registros carregados: {len(df)}")
 
-train = df_gold[df_gold["split_set"] == "TRAIN"]
-eval_set = df_gold[df_gold["split_set"] == "EVAL"]
-
-features = [
-    "diff_avg_points_last_5", "diff_avg_goals_for_last_5",
-    "diff_avg_goals_against_last_5", "diff_avg_points_season",
-    "home_rest_days", "away_rest_days"
+# 3. Separar as features preditivas
+feature_cols = [
+    "diff_avg_points_last_5",
+    "home_avg_points_last_5",
+    "away_avg_points_last_5",
+    "diff_avg_goals_for_last_5",
+    "home_avg_goals_for_last_5",
+    "away_avg_goals_for_last_5",
+    "diff_avg_points_season",
+    "home_rest_days",
+    "away_rest_days",
+    "h2h_points"
 ]
 
-X_train, y_train = train[features], train["label_outcome"]
-X_eval, y_eval = eval_set[features], eval_set["label_outcome"]
-print(f"Treino Gold pronto: {len(X_train)} amostras | Avaliação: {len(X_eval)} amostras")
+# 4. Divisão Temporal (Sem risco de data leakage)
+train_df = df[df["split_set"] == "TRAIN"]
+eval_df  = df[df["split_set"] == "EVAL"]
+pred_df  = df[df["split_set"] == "PREDICT"]
 
-```
+X_train, y_train = train_df[feature_cols], train_df["label_outcome"]
+X_eval, y_eval   = eval_df[feature_cols], eval_df["label_outcome"]
 
-### Exemplo de Query com Engenharia de Forma Recente no SQL:
-```sql
-SELECT 
-    m.match_id,
-    m.kickoff_utc,
-    m.home_team_name,
-    m.away_team_name,
-    m.outcome,
-    -- Média de pontos nos últimos 5 jogos do mandante em casa
-    AVG(tm_home.points) OVER (
-        PARTITION BY tm_home.team_id 
-        ORDER BY tm_home.kickoff_utc 
-        ROWS BETWEEN 5 PRECEDING AND 1 PRECEDING
-    ) AS home_recent_form,
-    -- Média de gols pró nos últimos 5 jogos do visitante
-    AVG(tm_away.goals_for) OVER (
-        PARTITION BY tm_away.team_id 
-        ORDER BY tm_away.kickoff_utc 
-        ROWS BETWEEN 5 PRECEDING AND 1 PRECEDING
-    ) AS away_recent_goals
-FROM `pdm-bia-505511.silver.matches_brasileirao` m
-JOIN `pdm-bia-505511.silver.team_matches` tm_home 
-  ON m.match_id = tm_home.match_id AND tm_home.is_home = TRUE
-JOIN `pdm-bia-505511.silver.team_matches` tm_away 
-  ON m.match_id = tm_away.match_id AND tm_away.is_home = FALSE
-WHERE m.status = 'finished'
-ORDER BY m.kickoff_utc DESC;
+print(f"Treino: {len(X_train)} amostras | Validação: {len(X_eval)} amostras")
+
+# 5. Treinar Modelo (Gradient Boosting)
+model = HistGradientBoostingClassifier(random_state=42, max_iter=100)
+model.fit(X_train, y_train)
+
+# 6. Avaliar no conjunto de validação (Fora do tempo)
+y_pred = model.predict(X_eval)
+y_proba = model.predict_proba(X_eval)
+
+print("\n--- Resultados na Validação (EVAL) ---")
+print(f"Acurácia: {accuracy_score(y_eval, y_pred):.2%}")
+print(f"Log Loss: {log_loss(y_eval, y_proba):.4f}")
+print("\nRelatório de Classificação:")
+print(classification_report(y_eval, y_pred))
+
+# 7. Gerar Predições para os Próximos Jogos Agendados (PREDICT)
+if len(pred_df) > 0:
+    X_future = pred_df[feature_cols]
+    pred_probs = model.predict_proba(X_future)
+    
+    classes = model.classes_ # ['away', 'draw', 'home']
+    for cls_idx, cls_name in enumerate(classes):
+        pred_df[f"prob_{cls_name}"] = pred_probs[:, cls_idx]
+    
+    print("\n--- Predições para Próximos Jogos ---")
+    print(pred_df[["kickoff_utc", "home_team_name", "away_team_name", "prob_home", "prob_draw", "prob_away"]].head(10))
 ```
