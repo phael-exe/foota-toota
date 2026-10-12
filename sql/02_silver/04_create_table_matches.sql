@@ -1,6 +1,7 @@
 -- Matches conformed fact table across all leagues and sources.
--- Unifies BBD EPL matches (4,939 matches), Football-Data.co.uk (10 leagues x 3 seasons),
--- Brasileirao Historico (8,785 matches) and Football-Data.org API (10 Tier 1 competitions).
+-- Unifies BBD EPL matches (4,939 matches), Football-Data.co.uk (10 leagues x 3 seasons, plus
+-- the Brazil file for the Brasileirao from 2025), Brasileirao Historico (8,785 matches, 2003-2024)
+-- and Football-Data.org API (Tier 1 competitions except the EPL, which Big Balls covers).
 -- Partitioned by DATE(kickoff_utc), clustered by league_id, home_team_id.
 
 CREATE OR REPLACE TABLE `PROJECT.silver.matches`
@@ -115,7 +116,9 @@ bra_matches AS (
             SAFE.PARSE_TIMESTAMP('%Y-%m-%d %H:%M', CONCAT(data, ' ', COALESCE(hora, '16:00'))),
             SAFE.PARSE_TIMESTAMP('%d/%m/%Y %H:%M', CONCAT(data, ' ', COALESCE(hora, '16:00')))
         ) AS kickoff_utc,
-        SAFE_CAST(SUBSTR(data, 1, 4) AS INT64) AS season,
+        -- data is dd/mm/yyyy; a January/February game closes the previous season (Covid 2020)
+        SAFE_CAST(SUBSTR(data, 7, 4) AS INT64)
+            - IF(SAFE_CAST(SUBSTR(data, 4, 2) AS INT64) <= 2, 1, 0) AS season,
         'finished' AS status,
         SAFE_CAST(mandante_Placar AS INT64) AS score_home,
         SAFE_CAST(visitante_Placar AS INT64) AS score_away,
@@ -140,6 +143,55 @@ bra_matches AS (
     WHERE mandante IS NOT NULL AND visitante IS NOT NULL
 ),
 
+-- Football-Data.co.uk Brazil file: fills the seasons after the historico ends (2025 on).
+-- Club names go through silver.team_alias so they match the historico ids.
+fduk_bra_matches AS (
+    SELECT
+        CONCAT('fduk_BRA_', FORMAT_DATE('%d%m%Y', b.Date), '_',
+               REGEXP_REPLACE(b.Home, '[^a-zA-Z0-9]', ''), '_',
+               REGEXP_REPLACE(b.Away, '[^a-zA-Z0-9]', '')) AS match_id,
+        'brasileirao_serie_a' AS league_id,
+        COALESCE(ah.team_id, b.Home) AS home_team_id,
+        COALESCE(aa.team_id, b.Away) AS away_team_id,
+        COALESCE(ah.team_id, b.Home) AS home_team_name,
+        COALESCE(aa.team_id, b.Away) AS away_team_name,
+        -- the file gives UK local time
+        SAFE.PARSE_TIMESTAMP('%Y-%m-%d %H:%M',
+                             CONCAT(CAST(b.Date AS STRING), ' ', COALESCE(b.Time, '20:00')),
+                             'Europe/London') AS kickoff_utc,
+        b.Season AS season,
+        'finished' AS status,
+        b.HG AS score_home,
+        b.AG AS score_away,
+        CASE b.Res
+            WHEN 'H' THEN 'home'
+            WHEN 'D' THEN 'draw'
+            WHEN 'A' THEN 'away'
+        END AS outcome,
+        CAST(NULL AS STRING) AS linescore_home,
+        CAST(NULL AS STRING) AS linescore_away,
+        CAST(NULL AS INT64) AS attendance,
+        CAST(NULL AS STRING) AS round,
+        b.PSCH IS NOT NULL OR b.B365CH IS NOT NULL AS has_odds,
+        CAST(b.Date AS STRING) AS kickoff_raw,
+        CAST(b.HG AS STRING) AS score_home_raw,
+        CAST(b.AG AS STRING) AS score_away_raw,
+        'football_data_uk' AS source_id,
+        b.batch_id,
+        b.source_file,
+        b.ingested_at
+    FROM `PROJECT.bronze.football_data_uk_bra` b
+    LEFT JOIN `PROJECT.silver.team_alias` ah
+           ON ah.league_id = 'brasileirao_serie_a' AND ah.source_id = 'football_data_uk'
+          AND ah.raw_name = b.Home
+    LEFT JOIN `PROJECT.silver.team_alias` aa
+           ON aa.league_id = 'brasileirao_serie_a' AND aa.source_id = 'football_data_uk'
+          AND aa.raw_name = b.Away
+    WHERE b.Home IS NOT NULL AND b.Away IS NOT NULL AND b.Date IS NOT NULL
+      -- a row without a score was never played (Chapecoense x Atletico-MG, Dec 2016)
+      AND b.HG IS NOT NULL AND b.AG IS NOT NULL
+),
+
 fdorg_matches AS (
     SELECT
         CONCAT('fdorg_', id) AS match_id,
@@ -156,12 +208,16 @@ fdorg_matches AS (
             WHEN 'PPL' THEN 'primeira_liga'
             ELSE LOWER(_competition_code)
         END AS league_id,
-        CAST(JSON_VALUE(homeTeam, '$.id') AS STRING) AS home_team_id,
-        CAST(JSON_VALUE(awayTeam, '$.id') AS STRING) AS away_team_id,
-        JSON_VALUE(homeTeam, '$.name') AS home_team_name,
-        JSON_VALUE(awayTeam, '$.name') AS away_team_name,
+        COALESCE(ah.team_id, CAST(JSON_VALUE(homeTeam, '$.id') AS STRING)) AS home_team_id,
+        COALESCE(aa.team_id, CAST(JSON_VALUE(awayTeam, '$.id') AS STRING)) AS away_team_id,
+        COALESCE(ah.team_id, JSON_VALUE(homeTeam, '$.name')) AS home_team_name,
+        COALESCE(aa.team_id, JSON_VALUE(awayTeam, '$.name')) AS away_team_name,
         SAFE_CAST(utcDate AS TIMESTAMP) AS kickoff_utc,
-        EXTRACT(YEAR FROM SAFE_CAST(utcDate AS TIMESTAMP)) AS season,
+        -- the season starts in its first year: 2026/27 is 2026, not 2027 for games after January
+        COALESCE(
+            EXTRACT(YEAR FROM SAFE_CAST(JSON_VALUE(season, '$.startDate') AS DATE)),
+            EXTRACT(YEAR FROM SAFE_CAST(utcDate AS TIMESTAMP))
+        ) AS season,
         CASE LOWER(status)
             WHEN 'timed' THEN 'scheduled'
             ELSE LOWER(status)
@@ -186,9 +242,18 @@ fdorg_matches AS (
         source_file,
         ingested_at
     FROM `PROJECT.bronze.football_data_org_matches`
+    LEFT JOIN `PROJECT.silver.team_alias` ah
+           ON _competition_code = 'BSA' AND ah.league_id = 'brasileirao_serie_a'
+          AND ah.source_id = 'football_data_org' AND ah.raw_name = JSON_VALUE(homeTeam, '$.name')
+    LEFT JOIN `PROJECT.silver.team_alias` aa
+           ON _competition_code = 'BSA' AND aa.league_id = 'brasileirao_serie_a'
+          AND aa.source_id = 'football_data_org' AND aa.raw_name = JSON_VALUE(awayTeam, '$.name')
     WHERE homeTeam IS NOT NULL AND awayTeam IS NOT NULL
-      -- Include future scheduled games or cups (CL) not covered by static CSVs
-      AND (LOWER(status) != 'finished' OR _competition_code = 'CL')
+      -- Big Balls already holds the whole EPL fixture list; here the same games carry other ids
+      AND _competition_code != 'PL'
+      -- Include future scheduled games or cups (CL) not covered by static CSVs. Finished
+      -- Brasileirao games stay too: brasileirao_fixtures below settles the overlap.
+      AND (LOWER(status) != 'finished' OR _competition_code IN ('CL', 'BSA'))
 ),
 
 all_matches AS (
@@ -197,6 +262,8 @@ all_matches AS (
     SELECT * FROM fduk_matches
     UNION ALL
     SELECT * FROM bra_matches
+    UNION ALL
+    SELECT * FROM fduk_bra_matches
     UNION ALL
     SELECT * FROM fdorg_matches
 ),
@@ -208,6 +275,26 @@ deduped AS (
             ORDER BY ingested_at DESC
         ) AS rn
     FROM all_matches
+),
+
+-- The Brasileirao arrives from three sources under different match ids. A season is a double
+-- round robin, so (season, home, away) names one game: keep its finished version, then the
+-- source with the longest history.
+brasileirao_fixtures AS (
+    SELECT *,
+        IF(league_id = 'brasileirao_serie_a',
+           ROW_NUMBER() OVER(
+               PARTITION BY league_id, season, home_team_id, away_team_id
+               ORDER BY status = 'finished' DESC,
+                        CASE source_id
+                            WHEN 'brasileirao_historico' THEN 1
+                            WHEN 'football_data_uk'      THEN 2
+                            ELSE 3
+                        END
+           ),
+           1) AS fixture_rn
+    FROM deduped
+    WHERE rn = 1
 )
 SELECT
     match_id,
@@ -235,5 +322,5 @@ SELECT
     source_file,
     ingested_at,
     CURRENT_TIMESTAMP() AS transformed_at
-FROM deduped
-WHERE rn = 1;
+FROM brasileirao_fixtures
+WHERE fixture_rn = 1;

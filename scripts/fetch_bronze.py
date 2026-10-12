@@ -5,6 +5,7 @@ Fontes e Ligas Cobertas:
 1. Football-Data.co.uk:
    - 10 ligas (Premier League, Championship, La Liga, Serie A, Bundesliga, Ligue 1, Eredivisie, Primeira Liga, Bélgica, Escócia)
    - Temporadas: 2024-2025, 2023-2024, 2022-2023 com dados de partidas, estatísticas e odds.
+   - Brasileirão Série A (new/BRA.csv): 2012 até a atualidade, com odds de fechamento.
 2. Brasileirão Dataset (adaoduque):
    - Histórico completo de 2003 até a atualidade (>8.700 partidas com placar, técnicos, formação, arena).
 3. Football-Data.org API (Tier One Free):
@@ -117,6 +118,34 @@ def fetch_football_data_uk(client: httpx.Client, state: dict) -> int:
         "total_records": total_saved,
     }
     return total_saved
+
+
+def fetch_football_data_uk_brazil(client: httpx.Client, state: dict) -> int:
+    """Baixa o Brasileirão Série A do Football-Data.co.uk (2012-presente, com odds)."""
+    print("\n=== [1b/4] Coletando Brasileirão do Football-Data.co.uk (2012-presente) ===")
+    out_dir = DATA_DIR / "football_data_uk_bra"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_file = out_dir / "BRA.csv"
+
+    url = "https://www.football-data.co.uk/new/BRA.csv"
+    headers = {"User-Agent": "Mozilla/5.0 (FootaToota MultiLeague/0.1)"}
+    try:
+        resp = client.get(url, headers=headers, follow_redirects=True, timeout=30.0)
+        if resp.status_code == 200 and len(resp.text.strip()) > 0:
+            content = resp.text.lstrip("﻿")
+            out_file.write_text(content, encoding="utf-8")
+            total_matches = len(content.strip().splitlines()) - 1
+            print(f"  ✓ Brasileirão (Football-Data.co.uk): {total_matches} partidas")
+            state.setdefault("sources", {})["football_data_uk_bra"] = {
+                "status": "success",
+                "last_updated": datetime.now(timezone.utc).isoformat(),
+                "total_records": total_matches,
+            }
+            return total_matches
+        print(f"  ✗ Erro ao baixar BRA.csv: status {resp.status_code}")
+    except Exception as e:
+        print(f"  ✗ Falha no download do BRA.csv: {e}")
+    return 0
 
 
 def fetch_brasileirao_dataset(client: httpx.Client, state: dict) -> int:
@@ -354,6 +383,7 @@ def main() -> None:
 
     with httpx.Client() as client:
         fetch_football_data_uk(client, state)
+        fetch_football_data_uk_brazil(client, state)
         fetch_brasileirao_dataset(client, state)
         api_key = env.get("FOOTBALLDATA_API_KEY", "")
         fetch_football_data_org(client, api_key, state)

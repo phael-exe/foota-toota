@@ -93,6 +93,31 @@ bra_teams AS (
     )
     WHERE team_name IS NOT NULL
 ),
+-- Brasileirao clubs of the Football-Data.co.uk Brazil file, under their canonical ids
+fduk_bra_teams AS (
+    SELECT DISTINCT
+        COALESCE(a.team_id, b.team_name) AS team_id,
+        COALESCE(a.team_id, b.team_name) AS team_name,
+        'brasileirao_serie_a' AS league_id,
+        'football' AS sport,
+        COALESCE(a.team_id, b.team_name) AS short_name,
+        CAST(NULL AS STRING) AS logo_url,
+        CAST(NULL AS STRING) AS stadium_name,
+        CAST(NULL AS FLOAT64) AS market_value_eur,
+        CAST(NULL AS INT64) AS squad_size,
+        'football_data_uk' AS source_id,
+        b.source_file,
+        b.ingested_at
+    FROM (
+        SELECT Home AS team_name, source_file, ingested_at FROM `PROJECT.bronze.football_data_uk_bra`
+        UNION ALL
+        SELECT Away AS team_name, source_file, ingested_at FROM `PROJECT.bronze.football_data_uk_bra`
+    ) b
+    LEFT JOIN `PROJECT.silver.team_alias` a
+           ON a.league_id = 'brasileirao_serie_a' AND a.source_id = 'football_data_uk'
+          AND a.raw_name = b.team_name
+    WHERE b.team_name IS NOT NULL
+),
 fdorg_teams AS (
     SELECT DISTINCT
         team_id,
@@ -143,6 +168,7 @@ all_teams AS (
     UNION ALL SELECT * FROM tm_clubs
     UNION ALL SELECT * FROM fduk_teams
     UNION ALL SELECT * FROM bra_teams
+    UNION ALL SELECT * FROM fduk_bra_teams
     UNION ALL SELECT * FROM fdorg_teams
 ),
 deduped AS (
