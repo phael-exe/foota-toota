@@ -1,0 +1,4 @@
+# Coletor (producer.py), instalado na imagem do Cloud Run Job.
+google-cloud-pubsub==2.43.0
+google-cloud-storage==3.14.1
+httpx==0.28.1

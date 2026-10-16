@@ -3,6 +3,6 @@
 CREATE OR REPLACE EXTERNAL TABLE `PROJECT.bronze.ext_news_rss`
 OPTIONS (
     format = 'NEWLINE_DELIMITED_JSON',
-    uris = ['gs://BUCKET/bronze/news_rss/*/*.jsonl'],
+    uris = ['gs://BUCKET/bronze/news_rss/*'],
     ignore_unknown_values = true
 );

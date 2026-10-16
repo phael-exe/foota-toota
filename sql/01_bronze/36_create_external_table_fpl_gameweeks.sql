@@ -3,7 +3,7 @@
 CREATE OR REPLACE EXTERNAL TABLE `PROJECT.bronze.ext_fpl_gameweeks`
 OPTIONS (
     format = 'CSV',
-    uris = ['gs://BUCKET/bronze/fpl_gameweeks/*/*.csv'],
+    uris = ['gs://BUCKET/bronze/fpl_gameweeks/*'],
     skip_leading_rows = 1,
     ignore_unknown_values = true
 );

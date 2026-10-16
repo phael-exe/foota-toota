@@ -3,6 +3,6 @@
 CREATE OR REPLACE EXTERNAL TABLE `PROJECT.bronze.ext_football_data_org_standings`
 OPTIONS (
     format = 'NEWLINE_DELIMITED_JSON',
-    uris = ['gs://BUCKET/bronze/football_data_org_standings/*/*.jsonl'],
+    uris = ['gs://BUCKET/bronze/football_data_org_standings/*'],
     ignore_unknown_values = true
 );

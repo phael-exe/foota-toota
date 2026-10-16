@@ -10,7 +10,9 @@ authors = [{ name = "André Koraleski", email = "andrekorale@gmail.com" }]
 keywords = ["football", "sports-data", "bigballsdata", "pitchside"]
 dependencies = [
     "google-cloud-bigquery[bqstorage,pandas]>=3.45.2",
+    "google-cloud-pubsub>=2.43.0",
     "google-cloud-storage>=3.14.1",
+    "httpx>=0.28.1",
     "pitchside>=0.1.1",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",

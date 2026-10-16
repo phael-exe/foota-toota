@@ -124,6 +124,54 @@ cd sql
 pipeline está de pé na nuvem. Diagramas de cada camada, o roteiro da
 apresentação e o notebook de demonstração estão em `docs/`.
 
+`scripts/atualizar_partidas.sh` coleta de novo o Football-Data.org e o
+`BRA.csv`, reconstrói o bronze dessas duas fontes e a silver e a gold, e
+reexporta as tabelas públicas.
+
+### Streaming (Trabalho 2)
+
+O Trabalho 2 junta ao batch um pipeline em tempo real. Um coletor publica
+cada mudança de partida do Brasileirão num tópico do Pub/Sub. A partir daí,
+duas assinaturas consomem os eventos:
+
+- uma assinatura BigQuery grava o evento bruto, o bronze do stream;
+- um job do Dataflow valida, limpa e grava os eventos em `stream.partidas`.
+
+Views na gold juntam o histórico do batch com o que chega pelo stream. Os
+contratos com a API do modelo e com a plataforma estão em
+[docs/trabalho2/contratos.md](docs/trabalho2/contratos.md).
+
+```text
+Football-Data.org -> coletor (Cloud Run Job, 5 min) -> Pub/Sub eventos
+  -> eventos-bigquery -> stream.eventos_brutos
+  -> eventos-dataflow -> Dataflow -> stream.partidas (+ partidas_rejeitadas)
+stream.partidas + silver.matches -> gold.partidas_unificadas -> gold.partidas_atual
+API do modelo -> Pub/Sub predicoes -> stream.predicoes -> gold.predicoes_avaliadas
+```
+
+```bash
+streaming/infra.sh               # tópicos, assinaturas, dataset stream, views
+streaming/deploy_coletor.sh      # coletor ao vivo no Cloud Run + Scheduler
+streaming/dataflow.sh iniciar    # pipeline no Dataflow (cobra por hora)
+streaming/dataflow.sh parar      # drena e encerra
+uv run python streaming/producer.py replay --rodadas 28-30 --intervalo 1
+```
+
+| Arquivo | O que faz |
+| --- | --- |
+| `streaming/producer.py` | Coletor: `live` publica o que mudou na API; `replay` reproduz rodadas já jogadas para a demo. |
+| `streaming/pipeline.py` | Pipeline Apache Beam: valida e limpa cada evento; os recusados vão para a quarentena com o motivo. |
+| `sql/10_stream/` | Dataset `stream`, tabelas particionadas por data do evento e views da gold. |
+
+As tabelas do stream são particionadas pela data do evento, então cada
+escrita cai só na partição do dia. Também são clusterizadas por liga e
+partida, para que a página de um jogo leia poucos blocos. Na demo, compare o
+batch com o stream em crescimento:
+
+```sql
+SELECT origem, mode, COUNT(*) FROM gold.partidas_unificadas GROUP BY 1, 2;
+```
+
 ### Cliente da API
 
 ```python
