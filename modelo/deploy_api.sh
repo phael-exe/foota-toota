@@ -6,7 +6,8 @@
 #
 #   APIs do Cloud Run, Cloud Build, Artifact Registry e Vertex AI
 #   conta de serviço modelo-api: lê o Model Registry e os artefatos no Cloud Storage
-#   tabela modelo.predicoes_vs_real (modelo/sql/), que a conta grava com MERGE
+#   tabela modelo.predicoes_vs_real, que a conta grava com MERGE, e a view
+#   modelo.acerto_por_versao (modelo/sql/, em ordem)
 #   repositório de imagens foota-toota em $MODELO_REGIAO
 #   serviço modelo-api, com PUSH_AUDIENCE = a URL do próprio /pubsub
 #
@@ -56,9 +57,11 @@ for papel in roles/aiplatform.viewer roles/storage.objectViewer roles/bigquery.j
         --member="serviceAccount:$SA" --role="$papel" --condition=None >/dev/null
 done
 
-echo "=== tabela $TABELA"
-sed "s/\`PROJECT\./\`$MODELO_PROJECT_ID./g" "$root/modelo/sql/predicoes_vs_real.sql" \
-    | "$BQ" query --use_legacy_sql=false --project_id="$MODELO_PROJECT_ID" >/dev/null
+echo "=== tabela $TABELA e view modelo.acerto_por_versao"
+for arquivo in "$root"/modelo/sql/*.sql; do
+    sed "s/\`PROJECT\./\`$MODELO_PROJECT_ID./g" "$arquivo" \
+        | "$BQ" query --use_legacy_sql=false --project_id="$MODELO_PROJECT_ID" >/dev/null
+done
 # GRANT em SQL: o `bq add-iam-policy-binding` em dataset pede allowlist do projeto
 echo "GRANT \`roles/bigquery.dataEditor\` ON SCHEMA \`$MODELO_PROJECT_ID.modelo\`
       TO \"serviceAccount:$SA\"" \

@@ -217,8 +217,10 @@ formato da **saída** é o da seção 3, para o `/predict` e o tópico falarem a
 - Predição x real: a tabela `pdm-andre-2026.modelo.predicoes_vs_real` (`modelo/sql/`) tem uma
   linha por `match_id`, o mesmo antes e depois do jogo. O `/pubsub` grava a predição quando chega um
   evento agendado e o placar quando chega o `FINISHED`, em qualquer ordem (MERGE), e `hit` diz se o
-  modelo acertou. Fica no projeto do André, ao lado dos modelos; a `gold.predicoes_avaliadas` do
-  pipeline continua sendo a visão por predição.
+  modelo acertou. A view `modelo.acerto_por_versao` resume acerto, log loss e o "sempre mandante"
+  por versão e modo (live/replay). Fica no projeto do André, ao lado dos modelos; a
+  `gold.predicoes_avaliadas` do pipeline continua sendo a visão por predição. Roteiro da demo:
+  [`demo-modelo.md`](demo-modelo.md).
 - O modelo de cada liga é a versão com alias `campeao` no Vertex AI Model Registry do projeto do
   André (sem o alias, a versão padrão). Mover o alias troca o modelo em até 10 minutos, sem deploy.
 - `modelo/treinar.py` treina os dois modelos (scikit-learn, árvores com boosting) sobre a mesma gold

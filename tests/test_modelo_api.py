@@ -712,3 +712,34 @@ def test_merge_do_resultado_calcula_o_real_e_o_acerto():
     assert parametros["real_outcome"] == ("STRING", "away")
     assert parametros["score_away"] == ("INT64", 1)
     assert parametros["result_at"][1].isoformat() == "2026-10-17T01:00:00+00:00"
+
+
+def test_inicio_carrega_features_e_modelo_antes_do_primeiro_pedido(fonte):
+    loja = Loja()
+    app = api.criar_app(
+        api.Config(verificar_token=False),
+        features={BSA.league_id: loja.features},
+        modelos=api.Modelos(fonte, 600.0),
+        publicar=lambda mensagem: None,
+        aquecer=True,
+    )
+
+    with TestClient(app) as cliente:
+        assert (loja.leituras, fonte.cargas) == (1, 1)
+        liga = cliente.get("/health").json()["ligas"]["brasileirao_serie_a"]
+
+    assert (liga["versao"], liga["partidas"]) == ("3", 2)
+
+
+def test_inicio_sobe_mesmo_sem_modelo(fonte):
+    fonte.falhar = api.SemModeloError("ainda não treinado")
+    app = api.criar_app(
+        api.Config(verificar_token=False),
+        features={BSA.league_id: Loja().features},
+        modelos=api.Modelos(fonte, 600.0),
+        publicar=lambda mensagem: None,
+        aquecer=True,
+    )
+
+    with TestClient(app) as cliente:
+        assert cliente.get("/health").status_code == 200

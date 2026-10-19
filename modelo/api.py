@@ -9,7 +9,7 @@ que chamam a mesma função de predição:
   POST /pubsub   push da assinatura `eventos-api`: prevê as partidas
                  agendadas, publica em `predicoes` e responde 204. Com
                  TABELA_AVALIACAO, grava também predição e resultado real
-                 numa linha por match_id (modelo/sql/predicoes_vs_real.sql)
+                 numa linha por match_id (modelo/sql/01_predicoes_vs_real.sql)
   GET  /health   versão do modelo e partidas carregadas de cada liga
 
 Features: a gold pública de cada liga (gs://foota-toota-505511/gold/), relida
@@ -632,7 +632,7 @@ def _instante(valor: Any) -> datetime | None:
 
 
 class Avaliacao:
-    """Tabela predição x real no BigQuery (modelo/sql/predicoes_vs_real.sql),
+    """Tabela predição x real no BigQuery (modelo/sql/01_predicoes_vs_real.sql),
     uma linha por match_id: o id do evento é o mesmo antes e depois do jogo.
 
     A predição e o resultado chegam em qualquer ordem (o Pub/Sub não garante
@@ -792,8 +792,8 @@ def criar_app(
     vistos = Recentes()
 
     def aquecer_tudo() -> None:
-        """Lê features e modelos antes do primeiro pedido, sem travar o
-        início do serviço; o que falhar é lido de novo no primeiro uso."""
+        """Lê features e modelos antes de aceitar pedidos; o que falhar é
+        lido de novo no primeiro uso, sem impedir o serviço de subir."""
         for loja in lojas.values():
             try:
                 loja.buscar("")
@@ -803,8 +803,12 @@ def criar_app(
 
     @asynccontextmanager
     async def ciclo(_: FastAPI) -> AsyncIterator[None]:
+        # Na inicialização, não numa thread: o Cloud Run só dá CPU durante
+        # pedidos, e uma thread em segundo plano ficava parada até o
+        # primeiro /predict. O uvicorn só abre a porta depois disto, então
+        # o Cloud Run segura o primeiro pedido até tudo estar carregado.
         if aquecer:
-            threading.Thread(target=aquecer_tudo, daemon=True).start()
+            await run_in_threadpool(aquecer_tudo)
         yield
 
     app = FastAPI(title="Foota Toota: modelo", lifespan=ciclo)
