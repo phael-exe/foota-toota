@@ -1,0 +1,6 @@
+# Treino (treinar.py): o ambiente da API mais o SDK do Vertex AI, que grava os
+# runs no Experiments. Fica fora da imagem da API.
+#   uv run --no-project --with-requirements modelo/requirements-treino.txt \
+#       python modelo/treinar.py
+-r requirements.txt
+google-cloud-aiplatform==2.5.0

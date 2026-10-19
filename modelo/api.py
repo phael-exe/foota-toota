@@ -7,7 +7,9 @@ que chamam a mesma função de predição:
   POST /predict  {"match_id": "fdorg_555047"}: devolve a predição no formato
                  da seção 3 e a publica no tópico `predicoes`
   POST /pubsub   push da assinatura `eventos-api`: prevê as partidas
-                 agendadas, publica em `predicoes` e responde 204
+                 agendadas, publica em `predicoes` e responde 204. Com
+                 TABELA_AVALIACAO, grava também predição e resultado real
+                 numa linha por match_id (modelo/sql/predicoes_vs_real.sql)
   GET  /health   versão do modelo e partidas carregadas de cada liga
 
 Features: a gold pública de cada liga (gs://foota-toota-505511/gold/), relida
@@ -47,7 +49,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, ClassVar, Protocol
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
@@ -131,6 +133,7 @@ class Config:
     verificar_token: bool = True
     modelos_dir: str | None = None
     recarregar_s: float = 600.0
+    tabela_avaliacao: str | None = None  # projeto.dataset.tabela
 
     @classmethod
     def do_ambiente(cls) -> Config:
@@ -146,6 +149,7 @@ class Config:
             verificar_token=env.get("VERIFICAR_TOKEN", "1") != "0",
             modelos_dir=env.get("MODELOS_DIR") or None,
             recarregar_s=float(env.get("RECARREGAR_SEGUNDOS", "600")),
+            tabela_avaliacao=env.get("TABELA_AVALIACAO") or None,
         )
 
 
@@ -607,6 +611,150 @@ def ler_evento(corpo: bytes) -> dict:
     return evento
 
 
+# --- predição x real --------------------------------------------------------
+
+
+def resultado_real(evento: dict) -> str | None:
+    """home, draw ou away pelo placar final; None sem placar."""
+    casa, fora = evento.get("score_home"), evento.get("score_away")
+    if casa is None or fora is None:
+        return None
+    if casa > fora:
+        return "home"
+    return "draw" if casa == fora else "away"
+
+
+def _instante(valor: Any) -> datetime | None:
+    """ISO 8601 (com Z) para datetime, como o parâmetro TIMESTAMP pede."""
+    if not valor:
+        return None
+    return datetime.fromisoformat(str(valor).replace("Z", "+00:00"))
+
+
+class Avaliacao:
+    """Tabela predição x real no BigQuery (modelo/sql/predicoes_vs_real.sql),
+    uma linha por match_id: o id do evento é o mesmo antes e depois do jogo.
+
+    A predição e o resultado chegam em qualquer ordem (o Pub/Sub não garante
+    ordem e reentrega), então os dois lados fazem MERGE: quem chega primeiro
+    cria a linha, quem chega depois completa e calcula o acerto."""
+
+    CONTEXTO = (
+        "league_id",
+        "competition",
+        "season",
+        "matchday",
+        "kickoff_utc",
+        "home_team_id",
+        "home_team_name",
+        "away_team_id",
+        "away_team_name",
+        "mode",
+    )
+    PREDICAO = (
+        "prediction_id",
+        "event_id",
+        "model_name",
+        "model_version",
+        "prob_home",
+        "prob_draw",
+        "prob_away",
+        "predicted_outcome",
+        "predicted_at",
+    )
+    RESULTADO = (
+        "score_home",
+        "score_away",
+        "real_outcome",
+        "result_event_id",
+        "result_at",
+    )
+    TIPOS: ClassVar[dict[str, str]] = {
+        "season": "INT64",
+        "matchday": "INT64",
+        "score_home": "INT64",
+        "score_away": "INT64",
+        "prob_home": "FLOAT64",
+        "prob_draw": "FLOAT64",
+        "prob_away": "FLOAT64",
+        "kickoff_utc": "TIMESTAMP",
+        "predicted_at": "TIMESTAMP",
+        "result_at": "TIMESTAMP",
+    }
+
+    def __init__(self, tabela: str, cliente: Any = None) -> None:
+        self.tabela = tabela
+        self._cliente = cliente
+
+    def predicao(self, liga: Liga, evento: dict, mensagem: dict) -> None:
+        valores = {c: mensagem[c] for c in self.PREDICAO}
+        self._merge(
+            liga,
+            evento,
+            valores,
+            "IF(t.real_outcome IS NULL, NULL,"
+            " s.predicted_outcome = t.real_outcome)",
+        )
+
+    def resultado(self, liga: Liga, evento: dict) -> None:
+        valores = {
+            "score_home": evento.get("score_home"),
+            "score_away": evento.get("score_away"),
+            "real_outcome": resultado_real(evento),
+            "result_event_id": evento.get("event_id"),
+            "result_at": evento.get("source_updated_at")
+            or evento.get("published_at"),
+        }
+        self._merge(
+            liga,
+            evento,
+            valores,
+            "IF(t.predicted_outcome IS NULL, NULL,"
+            " t.predicted_outcome = s.real_outcome)",
+        )
+
+    def _merge(
+        self, liga: Liga, evento: dict, proprios: dict, acerto: str
+    ) -> None:
+        from google.cloud import bigquery
+
+        contexto = {c: evento.get(c) for c in self.CONTEXTO}
+        contexto["league_id"] = liga.league_id
+        valores = {"match_id": evento["match_id"], **contexto, **proprios}
+        parametros = [
+            bigquery.ScalarQueryParameter(
+                nome,
+                self.TIPOS.get(nome, "STRING"),
+                _instante(valor)
+                if self.TIPOS.get(nome) == "TIMESTAMP"
+                else valor,
+            )
+            for nome, valor in valores.items()
+        ]
+        fonte = ", ".join(f"@{nome} AS {nome}" for nome in valores)
+        # O contexto do evento mais novo vence, sem apagar o que ele não traz
+        atualiza = [f"{c} = COALESCE(s.{c}, t.{c})" for c in contexto]
+        atualiza += [f"{c} = s.{c}" for c in proprios]
+        colunas = ", ".join(valores)
+        sql = f"""
+            MERGE `{self.tabela}` t
+            USING (SELECT {fonte}) s
+            ON t.match_id = s.match_id
+            WHEN MATCHED THEN UPDATE SET
+                {", ".join(atualiza)},
+                hit = {acerto},
+                updated_at = CURRENT_TIMESTAMP()
+            WHEN NOT MATCHED THEN
+                INSERT ({colunas}, updated_at)
+                VALUES ({", ".join(f"s.{c}" for c in valores)},
+                        CURRENT_TIMESTAMP())
+        """
+        if self._cliente is None:
+            self._cliente = bigquery.Client(project=self.tabela.split(".")[0])
+        config = bigquery.QueryJobConfig(query_parameters=parametros)
+        self._cliente.query(sql, job_config=config).result(timeout=50)
+
+
 # --- rotas ------------------------------------------------------------------
 
 
@@ -625,10 +773,13 @@ def criar_app(
     modelos: Modelos | None = None,
     publicar: Callable[[dict], None] | None = None,
     verificar: Callable[[str | None], None] | None = None,
+    avaliacao: Avaliacao | None = None,
     relogio: Callable[[], str] = agora,
     aquecer: bool = False,
 ) -> FastAPI:
     cfg = cfg or Config.do_ambiente()
+    if avaliacao is None and cfg.tabela_avaliacao:
+        avaliacao = Avaliacao(cfg.tabela_avaliacao)
     if features is None:
         features = {
             liga.league_id: Features(liga, cfg.dados_url, cfg.recarregar_s)
@@ -669,7 +820,8 @@ def criar_app(
                     "features_lidas_em": loja.lido_em,
                 }
                 for liga_id, loja in lojas.items()
-            }
+            },
+            "predicoes_vs_real": avaliacao.tabela if avaliacao else None,
         }
 
     def localizar(pedido: Pedido) -> tuple[Liga, dict]:
@@ -718,14 +870,20 @@ def criar_app(
 
     def processar(corpo: bytes) -> int:
         """Status da resposta ao push: 204 confirma (inclusive o que é
-        ignorado de propósito); 503 pede reentrega numa falha passageira."""
+        ignorado de propósito); 503 pede reentrega numa falha passageira.
+
+        Agendada: prevê, grava a predição na tabela predição x real e
+        publica em `predicoes`. Encerrada: grava o resultado real na mesma
+        linha (mesmo match_id). O resto é ignorado."""
         try:
             evento = ler_evento(corpo)
         except (ValueError, KeyError, TypeError) as erro:
             log.warning("mensagem ilegível descartada: %s", erro)
             return 204
         event_id = evento.get("event_id")
-        if evento.get("status") not in AGENDADA or event_id in vistos:
+        status = evento.get("status")
+        encerrada = status == "FINISHED" and avaliacao is not None
+        if (status not in AGENDADA and not encerrada) or event_id in vistos:
             return 204
         loja = next(
             (
@@ -739,27 +897,35 @@ def criar_app(
             return 204
         match_id = evento["match_id"]
         try:
-            linha = loja.buscar(match_id, evento)
-            if linha is None:
-                log.warning("%s não está na gold; ignorado", match_id)
-                return 204
-            modelo = modelos_.obter(loja.liga)
-            mensagem = predicao(
-                loja.liga, modelo, linha, match_id, event_id, relogio()
-            )
-            publicar_(mensagem)
+            if encerrada and avaliacao is not None:
+                avaliacao.resultado(loja.liga, evento)
+                log.info("%s: resultado %s", match_id, resultado_real(evento))
+            else:
+                linha = loja.buscar(match_id, evento)
+                if linha is None:
+                    log.warning("%s não está na gold; ignorado", match_id)
+                    return 204
+                modelo = modelos_.obter(loja.liga)
+                mensagem = predicao(
+                    loja.liga, modelo, linha, match_id, event_id, relogio()
+                )
+                # Antes de publicar: se a gravação falhar, a reentrega refaz
+                # as duas coisas, e o prediction_id é o mesmo
+                if avaliacao is not None:
+                    avaliacao.predicao(loja.liga, evento, mensagem)
+                publicar_(mensagem)
+                log.info(
+                    "%s -> %s (%s v%s)",
+                    match_id,
+                    mensagem["predicted_outcome"],
+                    mensagem["model_name"],
+                    mensagem["model_version"],
+                )
         except Exception:
             log.exception("%s: falha, o Pub/Sub tenta de novo", event_id)
             return 503
         if event_id:
             vistos.adicionar(event_id)
-        log.info(
-            "%s -> %s (%s v%s)",
-            match_id,
-            mensagem["predicted_outcome"],
-            mensagem["model_name"],
-            mensagem["model_version"],
-        )
         return 204
 
     @app.post("/pubsub", status_code=204)

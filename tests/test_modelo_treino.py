@@ -277,3 +277,91 @@ def test_modelo_atual_so_tolera_falha_no_modo_sem_registrar():
     assert treinar.modelo_atual(Quebrado(), tolerar=True)(BSA) is None
     with pytest.raises(RuntimeError):
         treinar.modelo_atual(Quebrado())(BSA)
+
+
+# --- Experiments ------------------------------------------------------------
+
+
+def _relatorio(campeao: bool = True) -> dict:
+    _, relatorio = treinar.treinar_liga(
+        BSA,
+        GOLD,
+        (lambda liga: ("1", Uniforme())) if campeao else (lambda liga: None),
+        **BUSCA,
+    )
+    relatorio["execucao"] = "20261019t051751z"
+    return relatorio
+
+
+def test_nome_run_segue_o_formato_do_vertex():
+    assert treinar.nome_run(_relatorio()) == (
+        "brasileirao-serie-a-20261019t051751z"
+    )
+
+
+def test_run_do_experimento_aprovado_leva_versao_e_campeao():
+    parametros, metricas = treinar.run_do_experimento(
+        _relatorio(), "2", "gs://b/x/"
+    )
+
+    assert parametros["decisao"] == "aprovado"
+    assert parametros["versao_registry"] == "2"
+    assert parametros["campeao_comparado"] == "1"
+    assert {"test_log_loss", "mandante_acuracia", "campeao_log_loss"} <= set(
+        metricas
+    )
+    valores = [*parametros.values(), *metricas.values()]
+    assert all(isinstance(v, str | int | float) for v in valores)
+
+
+def test_run_do_experimento_reprovado_nao_tem_versao():
+    relatorio = _relatorio(campeao=False)
+    relatorio["aprovado"] = False
+    relatorio["motivos"] = ["log loss não passa o campeão"]
+
+    parametros, metricas = treinar.run_do_experimento(relatorio, None, None)
+
+    assert parametros["decisao"] == "reprovado"
+    assert parametros["versao_registry"] == "-"
+    assert parametros["motivos"] == "log loss não passa o campeão"
+    assert "campeao_log_loss" not in metricas
+
+
+def test_experimento_grava_o_run_sem_tensorboard(monkeypatch):
+    chamadas: list = []
+
+    class SDK:
+        def init(self, **kwargs):
+            chamadas.append(("init", kwargs))
+
+        def start_run(self, run, resume=False):
+            chamadas.append(("start_run", run, resume))
+            if not resume:
+                raise RuntimeError("run já existe")
+
+        def log_params(self, parametros):
+            chamadas.append(("log_params", parametros["decisao"]))
+
+        def log_metrics(self, metricas):
+            chamadas.append(("log_metrics", sorted(metricas)[0]))
+
+        def end_run(self):
+            chamadas.append(("end_run",))
+
+    monkeypatch.setitem(sys.modules, "google.cloud.aiplatform", SDK())
+
+    run = treinar.experimento("p", "us-central1", _relatorio(), "2", "gs://b/")
+
+    assert run == "brasileirao-serie-a-20261019t051751z"
+    init = chamadas[0][1]
+    assert init["experiment"] == treinar.EXPERIMENTO
+    assert init["experiment_tensorboard"] is False
+    assert [c[0] for c in chamadas] == [
+        "init",
+        "start_run",
+        "start_run",
+        "log_params",
+        "log_metrics",
+        "end_run",
+    ]
+    assert chamadas[2] == ("start_run", run, True)

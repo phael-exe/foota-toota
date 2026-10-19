@@ -12,9 +12,11 @@ Para cada liga de api.LIGAS, sobre a gold pública que a API também lê:
      sempre mandante (acurácia) e frequências do treino (log loss), e contra o
      modelo que a API serve hoje, reavaliado no mesmo TEST;
   5. aprovado nos três, sobe o artefato, registra uma versão nova e move o
-     alias `campeao` para ela. A API troca de versão em até 10 minutos.
+     alias `campeao` para ela. A API troca de versão em até 10 minutos;
+  6. grava um run no Vertex AI Experiments (EXPERIMENTO) com hiperparâmetros,
+     métricas de TEST, baselines e a decisão, aprovado ou não.
 
-  uv run --no-project --with-requirements modelo/requirements.txt \\
+  uv run --no-project --with-requirements modelo/requirements-treino.txt \\
       python modelo/treinar.py
   ... python modelo/treinar.py --ligas epl --sem-registrar --saida modelos/
 
@@ -43,6 +45,7 @@ import api
 
 
 ALIAS = "campeao"
+EXPERIMENTO = "foota-toota-resultado"
 # Só metadado: a API serve do Cloud Run. É o contêiner do Vertex para o
 # scikit-learn de requirements.txt, caso alguém queira um endpoint.
 SERVING = "us-docker.pkg.dev/vertex-ai/prediction/sklearn-cpu.1-6:latest"
@@ -358,6 +361,84 @@ def modelo_atual(
     return atual
 
 
+# --- Experiments ------------------------------------------------------------
+
+
+def nome_run(relatorio: dict) -> str:
+    """Um run por liga e execução: brasileirao-serie-a-20261019t051751z."""
+    nome = f"{relatorio['liga']}-{relatorio['execucao']}"
+    return nome.replace("_", "-").lower()
+
+
+def run_do_experimento(
+    relatorio: dict, versao: str | None, uri: str | None
+) -> tuple[dict, dict]:
+    """(parâmetros, métricas) do run: o que foi treinado, como se saiu em
+    TEST e a decisão. O reprovado também fica, como evidência da decisão."""
+    h = relatorio["hiperparametros"]
+    p = relatorio["partidas"]
+    t = relatorio["teste"]
+    parametros = {
+        "liga": relatorio["liga"],
+        "modelo": relatorio["modelo"],
+        "algoritmo": "HistGradientBoostingClassifier",
+        "scikit_learn": relatorio["scikit_learn"],
+        "max_depth": h["max_depth"],
+        "learning_rate": h["learning_rate"],
+        "max_iter": h["max_iter"],
+        "partidas_train": p["TRAIN"],
+        "partidas_eval": p["EVAL"],
+        "partidas_test": p["TEST"],
+        "decisao": "aprovado" if relatorio["aprovado"] else "reprovado",
+        "motivos": "; ".join(relatorio["motivos"])[:500] or "-",
+        "campeao_comparado": t["campeao"]["versao"] if t["campeao"] else "-",
+        "versao_registry": versao or "-",
+        "artefato": uri or "-",
+    }
+    metricas_run = {
+        "log_loss_eval": relatorio["log_loss_eval"],
+        "test_acuracia": t["modelo"]["acuracia"],
+        "test_log_loss": t["modelo"]["log_loss"],
+        "test_brier": t["modelo"]["brier"],
+        "mandante_acuracia": t["sempre_mandante"]["acuracia"],
+        "frequencias_log_loss": t["frequencias"]["log_loss"],
+        "frequencias_brier": t["frequencias"]["brier"],
+    }
+    if t["campeao"]:
+        metricas_run["campeao_acuracia"] = t["campeao"]["acuracia"]
+        metricas_run["campeao_log_loss"] = t["campeao"]["log_loss"]
+    return parametros, metricas_run
+
+
+def experimento(
+    projeto: str,
+    regiao: str,
+    relatorio: dict,
+    versao: str | None,
+    uri: str | None,
+) -> str:
+    """Grava o run no Vertex AI Experiments e devolve o nome dele. Sem
+    TensorBoard: com ele o SDK cria sozinho uma instância paga."""
+    from google.cloud import aiplatform
+
+    parametros, metricas_run = run_do_experimento(relatorio, versao, uri)
+    aiplatform.init(
+        project=projeto,
+        location=regiao,
+        experiment=EXPERIMENTO,
+        experiment_tensorboard=False,
+    )
+    run = nome_run(relatorio)
+    try:
+        aiplatform.start_run(run)
+    except Exception:  # reexecução com o mesmo carimbo: o run já existe
+        aiplatform.start_run(run, resume=True)
+    aiplatform.log_params(parametros)
+    aiplatform.log_metrics(metricas_run)
+    aiplatform.end_run()
+    return run
+
+
 def main(argv: list[str] | None = None) -> int:
     cfg = api.Config.do_ambiente()
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -414,32 +495,43 @@ def main(argv: list[str] | None = None) -> int:
 
         if not relatorio["aprovado"]:
             reprovadas += 1
-            continue
         if args.sem_registrar or registry is None:
             continue
-        uri = subir(
-            cfg.projeto or "",
-            args.bucket,
-            cfg.regiao,
-            f"{liga.modelo}/{carimbo}",
-            arquivos,
-        )
-        m = relatorio["teste"]["modelo"]
-        descricao = (
-            f"{carimbo} | TEST n={m['n']} acurácia {m['acuracia']:.4f} "
-            f"log loss {m['log_loss']:.4f} | {relatorio['hiperparametros']}"
-        )
-        rotulos = {
-            "liga": liga.league_id,
-            "execucao": carimbo,
-            "origem": "treinar_py",
-        }
-        pai, versao = registrar(registry, liga.modelo, uri, descricao, rotulos)
-        anterior = promover(registry, pai, versao)
-        print(
-            f"registrado: {liga.modelo} versão {versao} ({uri}); "
-            f"alias {ALIAS}: {anterior or 'nenhuma'} -> {versao}"
-        )
+        versao = uri = None
+        if relatorio["aprovado"]:
+            uri = subir(
+                cfg.projeto or "",
+                args.bucket,
+                cfg.regiao,
+                f"{liga.modelo}/{carimbo}",
+                arquivos,
+            )
+            m = relatorio["teste"]["modelo"]
+            descricao = (
+                f"{carimbo} | TEST n={m['n']} acurácia {m['acuracia']:.4f} "
+                f"log loss {m['log_loss']:.4f} | {relatorio['hiperparametros']}"
+            )
+            rotulos = {
+                "liga": liga.league_id,
+                "execucao": carimbo,
+                "origem": "treinar_py",
+            }
+            pai, versao = registrar(
+                registry, liga.modelo, uri, descricao, rotulos
+            )
+            anterior = promover(registry, pai, versao)
+            print(
+                f"registrado: {liga.modelo} versão {versao} ({uri}); "
+                f"alias {ALIAS}: {anterior or 'nenhuma'} -> {versao}"
+            )
+        try:
+            run = experimento(
+                cfg.projeto or "", cfg.regiao, relatorio, versao, uri
+            )
+            print(f"Experiments: {EXPERIMENTO} / {run}")
+        except Exception as erro:
+            # O registro (se houve) já valeu; só o histórico ficou sem o run
+            print(f"aviso: run do Experiments não gravado: {erro}")
     return 1 if reprovadas else 0
 
 

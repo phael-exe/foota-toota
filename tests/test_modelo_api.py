@@ -547,3 +547,168 @@ def test_health_mostra_versao_e_partidas(cliente):
     assert liga["modelo"] == "boosted_tree_brasileirao"
     assert liga["versao"] == "3"
     assert liga["partidas"] == 2
+
+
+# --- predição x real --------------------------------------------------------
+
+
+class AvaliacaoFalsa:
+    def __init__(self) -> None:
+        self.tabela = "p.modelo.predicoes_vs_real"
+        self.predicoes: list = []
+        self.resultados: list = []
+        self.falhar = False
+
+    def predicao(self, liga, evento, mensagem) -> None:
+        if self.falhar:
+            raise RuntimeError("BigQuery fora")
+        self.predicoes.append((liga.league_id, evento["match_id"], mensagem))
+
+    def resultado(self, liga, evento) -> None:
+        self.resultados.append((liga.league_id, evento["match_id"]))
+
+
+@pytest.fixture
+def avaliacao() -> AvaliacaoFalsa:
+    return AvaliacaoFalsa()
+
+
+@pytest.fixture
+def com_tabela(fonte, publicadas, avaliacao) -> TestClient:
+    app = api.criar_app(
+        api.Config(verificar_token=False),
+        features={BSA.league_id: Loja().features},
+        modelos=api.Modelos(fonte, 600.0),
+        publicar=publicadas.append,
+        avaliacao=avaliacao,
+        relogio=lambda: AGORA,
+    )
+    return TestClient(app)
+
+
+def test_agendada_grava_a_predicao_antes_de_publicar(
+    com_tabela, avaliacao, publicadas
+):
+    assert com_tabela.post("/pubsub", json=envelope()).status_code == 204
+
+    assert len(avaliacao.predicoes) == 1
+    liga, match_id, mensagem = avaliacao.predicoes[0]
+    assert (liga, match_id) == ("brasileirao_serie_a", "fdorg_555047")
+    assert publicadas == [mensagem]
+
+
+def test_encerrada_grava_o_resultado_na_mesma_partida(
+    com_tabela, avaliacao, publicadas
+):
+    resp = com_tabela.post(
+        "/pubsub",
+        json=envelope(
+            event_id="fdorg_555047:FINISHED:2-1:2026-10-16T23:00:00Z",
+            status="FINISHED",
+            score_home=2,
+            score_away=1,
+        ),
+    )
+
+    assert resp.status_code == 204
+    assert avaliacao.resultados == [("brasileirao_serie_a", "fdorg_555047")]
+    assert publicadas == []
+
+
+def test_falha_na_tabela_pede_reentrega_sem_publicar(
+    com_tabela, avaliacao, publicadas
+):
+    avaliacao.falhar = True
+
+    assert com_tabela.post("/pubsub", json=envelope()).status_code == 503
+    assert publicadas == []
+
+
+def test_health_mostra_a_tabela(com_tabela):
+    corpo = com_tabela.get("/health").json()
+
+    assert corpo["predicoes_vs_real"] == "p.modelo.predicoes_vs_real"
+
+
+@pytest.mark.parametrize(
+    ("casa", "fora", "esperado"),
+    [(2, 1, "home"), (1, 1, "draw"), (0, 3, "away"), (None, 1, None)],
+)
+def test_resultado_real(casa, fora, esperado):
+    evento = {"score_home": casa, "score_away": fora}
+
+    assert api.resultado_real(evento) == esperado
+
+
+class ClienteBQ:
+    def __init__(self) -> None:
+        self.consultas: list = []
+
+    def query(self, sql, job_config=None):
+        assert job_config is not None
+        parametros = {
+            p.name: (p.type_, p.value) for p in job_config.query_parameters
+        }
+        self.consultas.append((sql, parametros))
+
+        class Job:
+            def result(self, timeout=None):
+                return []
+
+        return Job()
+
+
+def _evento(**campos) -> dict:
+    return json.loads(base64.b64decode(envelope(**campos)["message"]["data"]))
+
+
+def test_merge_da_predicao_so_mexe_nas_colunas_da_predicao():
+    cliente = ClienteBQ()
+    tabela = api.Avaliacao("p.modelo.predicoes_vs_real", cliente)
+    mensagem = {
+        "prediction_id": "x",
+        "event_id": "e",
+        "model_name": "boosted_tree_brasileirao",
+        "model_version": "1",
+        "prob_home": 0.5,
+        "prob_draw": 0.3,
+        "prob_away": 0.2,
+        "predicted_outcome": "home",
+        "predicted_at": AGORA,
+    }
+
+    tabela.predicao(BSA, _evento(kickoff_utc="2026-10-16T23:00:00Z"), mensagem)
+
+    sql, parametros = cliente.consultas[0]
+    assert "MERGE `p.modelo.predicoes_vs_real` t" in sql
+    assert "ON t.match_id = s.match_id" in sql
+    assert "predicted_outcome = s.predicted_outcome" in sql
+    assert "score_home = s.score_home" not in sql
+    assert "s.predicted_outcome = t.real_outcome" in sql
+    assert parametros["match_id"] == ("STRING", "fdorg_555047")
+    assert parametros["season"] == ("INT64", 2026)
+    tipo, kickoff = parametros["kickoff_utc"]
+    assert tipo == "TIMESTAMP"
+    assert kickoff.isoformat() == "2026-10-16T23:00:00+00:00"
+
+
+def test_merge_do_resultado_calcula_o_real_e_o_acerto():
+    cliente = ClienteBQ()
+    tabela = api.Avaliacao("p.modelo.predicoes_vs_real", cliente)
+
+    tabela.resultado(
+        BSA,
+        _evento(
+            status="FINISHED",
+            score_home=0,
+            score_away=1,
+            source_updated_at="2026-10-17T01:00:00Z",
+        ),
+    )
+
+    sql, parametros = cliente.consultas[0]
+    assert "t.predicted_outcome = s.real_outcome" in sql
+    assert "prob_home" not in sql
+    assert parametros["real_outcome"] == ("STRING", "away")
+    assert parametros["score_away"] == ("INT64", 1)
+    assert parametros["result_at"][1].isoformat() == "2026-10-17T01:00:00+00:00"

@@ -6,6 +6,7 @@
 #
 #   APIs do Cloud Run, Cloud Build, Artifact Registry e Vertex AI
 #   conta de serviço modelo-api: lê o Model Registry e os artefatos no Cloud Storage
+#   tabela modelo.predicoes_vs_real (modelo/sql/), que a conta grava com MERGE
 #   repositório de imagens foota-toota em $MODELO_REGIAO
 #   serviço modelo-api, com PUSH_AUDIENCE = a URL do próprio /pubsub
 #
@@ -29,7 +30,9 @@ MODELO_REGIAO="${MODELO_REGIAO:-us-central1}"
 MODELO_PUBLICO="${MODELO_PUBLICO:-1}"
 PIPELINE_PROJECT_ID="${PIPELINE_PROJECT_ID:-pdm-bia-505511}"
 GCLOUD="${GCLOUD_BIN:-gcloud}"
+BQ="${BQ_BIN:-bq}"
 SERVICO="modelo-api"
+TABELA="$MODELO_PROJECT_ID.modelo.predicoes_vs_real"
 SA="$SERVICO@$MODELO_PROJECT_ID.iam.gserviceaccount.com"
 PUSH_SA="pubsub-push@$PIPELINE_PROJECT_ID.iam.gserviceaccount.com"
 REPOSITORIO="foota-toota"
@@ -48,10 +51,18 @@ if ! existe "$GCLOUD" iam service-accounts describe "$SA" "$project"; then
     "$GCLOUD" iam service-accounts create "$SERVICO" \
         --display-name="API do modelo (Cloud Run)" "$project"
 fi
-for papel in roles/aiplatform.viewer roles/storage.objectViewer; do
+for papel in roles/aiplatform.viewer roles/storage.objectViewer roles/bigquery.jobUser; do
     "$GCLOUD" projects add-iam-policy-binding "$MODELO_PROJECT_ID" \
         --member="serviceAccount:$SA" --role="$papel" --condition=None >/dev/null
 done
+
+echo "=== tabela $TABELA"
+sed "s/\`PROJECT\./\`$MODELO_PROJECT_ID./g" "$root/modelo/sql/predicoes_vs_real.sql" \
+    | "$BQ" query --use_legacy_sql=false --project_id="$MODELO_PROJECT_ID" >/dev/null
+# GRANT em SQL: o `bq add-iam-policy-binding` em dataset pede allowlist do projeto
+echo "GRANT \`roles/bigquery.dataEditor\` ON SCHEMA \`$MODELO_PROJECT_ID.modelo\`
+      TO \"serviceAccount:$SA\"" \
+    | "$BQ" query --use_legacy_sql=false --project_id="$MODELO_PROJECT_ID" >/dev/null
 
 echo "=== repositório de imagens $REPOSITORIO"
 if ! existe "$GCLOUD" artifacts repositories describe "$REPOSITORIO" \
@@ -77,7 +88,7 @@ echo "=== Cloud Run $SERVICO"
     "$region" \
     --service-account="$SA" \
     "$acesso" \
-    --set-env-vars="MODELO_PROJECT_ID=$MODELO_PROJECT_ID,MODELO_REGIAO=$MODELO_REGIAO,TOPICO_PREDICOES=projects/$PIPELINE_PROJECT_ID/topics/predicoes,PUSH_SA=$PUSH_SA,VERIFICAR_TOKEN=$verificar" \
+    --set-env-vars="MODELO_PROJECT_ID=$MODELO_PROJECT_ID,MODELO_REGIAO=$MODELO_REGIAO,TOPICO_PREDICOES=projects/$PIPELINE_PROJECT_ID/topics/predicoes,PUSH_SA=$PUSH_SA,VERIFICAR_TOKEN=$verificar,TABELA_AVALIACAO=$TABELA" \
     --memory=1Gi \
     --cpu=1 \
     --min-instances=0 \
