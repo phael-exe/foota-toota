@@ -199,6 +199,29 @@ em `gold.match_features` (as partidas agendadas do Brasileirão estão lá com `
 e o mesmo `match_id` dos eventos), ou receber as features diretamente. A escolha é do André; o
 formato da **saída** é o da seção 3, para o `/predict` e o tópico falarem a mesma língua.
 
+**Como ficou (`modelo/api.py`):**
+
+- `POST /predict` recebe `{"match_id": "fdorg_555047"}` e acha a liga sozinho; `league_id` é
+  opcional. Para simular uma partida, `{"match_id": "...", "league_id": "epl", "features": {...}}`
+  usa as features enviadas (as que faltam viram nulo). A predição também é publicada em
+  `predicoes`, com `event_id` nulo, a não ser com `"publicar": false`.
+- As features vêm da gold pública (`gs://foota-toota-505511/gold/match_features_<liga>.parquet`),
+  relida a cada 10 minutos. Não precisa de acesso ao BigQuery do pipeline.
+- `POST /pubsub` acha a partida pelo `match_id` e, se não achar, pelo confronto (temporada,
+  mandante e visitante). O replay traz ids `fdorg_` de jogos que a gold guarda com outro id
+  (`fduk_...`); o de-para de clubes sai de `bronze/football_data_org/competition=BSA/matches.jsonl`.
+  A predição publicada leva sempre o `match_id` do evento.
+- `prediction_id` é o mesmo para o mesmo `event_id` e a mesma versão do modelo, então uma
+  reentrega do Pub/Sub repete o id em vez de criar outro.
+- `GET /health` mostra a versão de cada modelo e quantas partidas cada liga tem carregadas.
+- O modelo de cada liga é a versão com alias `campeao` no Vertex AI Model Registry do projeto do
+  André (sem o alias, a versão padrão). Mover o alias troca o modelo em até 10 minutos, sem deploy.
+- `modelo/treinar.py` treina os dois modelos (scikit-learn, árvores com boosting) sobre a mesma gold
+  pública: hiperparâmetros escolhidos em EVAL, retreino em TRAIN + EVAL, medida em TEST. Uma versão
+  só ganha o alias `campeao` se bater, em TEST, o "sempre mandante" (acurácia), as frequências do
+  treino (log loss) e o campeão atual, reavaliado nas mesmas partidas. O `metricas.json` fica ao
+  lado do `model.joblib` no bucket.
+
 Para publicar em `predicoes` de outro projeto, a conta de serviço do Cloud Run precisa de
 `roles/pubsub.publisher` no tópico. O Raphael concede (`MODELO_SA=<email> streaming/infra.sh`).
 
@@ -287,6 +310,8 @@ Há dois jeitos de fazer isso no Cloud Run. Se o serviço exige autenticação, 
 | Replay de rodadas para a demo | `uv run python streaming/producer.py replay --rodadas 28-30 --intervalo 1` |
 | Ver eventos sem publicar | `uv run python streaming/producer.py --sem-publicar replay --rodadas 30 --intervalo 0` |
 | Atualizar o batch (bronze -> gold) | `scripts/atualizar_partidas.sh` |
+| Treinar, avaliar e registrar os modelos | `uv run --no-project --with-requirements modelo/requirements.txt python modelo/treinar.py` |
+| Publicar a API do modelo (projeto do André) | `modelo/deploy_api.sh` |
 
 Com o Dataflow desligado nada se perde: os eventos continuam caindo em `stream.eventos_brutos` e
 esperam até 7 dias na assinatura `eventos-dataflow`, processados quando o job volta.

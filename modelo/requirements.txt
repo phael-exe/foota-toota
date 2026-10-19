@@ -1,0 +1,17 @@
+# API do modelo (api.py), instalada na imagem do Cloud Run modelo-api, e treino
+# (treinar.py), que usa o mesmo ambiente:
+#   uv run --no-project --with-requirements modelo/requirements.txt \
+#       python modelo/treinar.py
+# O scikit-learn é o 1.6, o mais novo com contêiner pronto no Vertex AI
+# (sklearn-cpu.1-6): o model.joblib treinado aqui carrega na API e também num
+# endpoint do Vertex. Um pickle de outra versão pode não carregar.
+fastapi==0.146.0
+google-auth==2.62.0
+google-cloud-pubsub==2.43.0
+google-cloud-storage==3.14.1
+httpx==0.28.1
+joblib==1.6.0
+pyarrow==26.0.0
+requests==2.34.2
+scikit-learn==1.6.1
+uvicorn==0.54.0
