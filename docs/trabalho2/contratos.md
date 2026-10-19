@@ -199,6 +199,12 @@ em `gold.match_features` (as partidas agendadas do Brasileirão estão lá com `
 e o mesmo `match_id` dos eventos), ou receber as features diretamente. A escolha é do André; o
 formato da **saída** é o da seção 3, para o `/predict` e o tópico falarem a mesma língua.
 
+**Dados de treino**, um arquivo por liga, com as features da gold e três rótulos
+(`label_outcome`, `label_goals_home`, `label_goals_away`):
+`https://storage.googleapis.com/foota-toota-505511/gold/match_training_brasileirao.parquet` e
+`.../gold/match_training_epl.parquet`. Use `split_set` (`TRAIN`, `EVAL`, `TEST`, `PREDICT`); as
+linhas `PREDICT` são os jogos a prever, sem rótulo. Os gols são só rótulo, nunca feature.
+
 Para publicar em `predicoes` de outro projeto, a conta de serviço do Cloud Run precisa de
 `roles/pubsub.publisher` no tópico. O Raphael concede (`MODELO_SA=<email> streaming/infra.sh`).
 

@@ -25,7 +25,7 @@ GCLOUD="${GCLOUD_BIN:-gcloud}"
 
 silver=(matches matches_brasileirao matches_epl standings match_stats match_goals match_odds
         match_tactics match_weather news_articles transfers player_valuations)
-gold=(match_features_brasileirao match_features_epl)
+gold=(match_features_brasileirao match_features_epl match_training_brasileirao match_training_epl)
 
 extract() {
     local table="$1" format="$2" ext="$3"
