@@ -10,10 +10,11 @@ As transformações estão versionadas e ordenadas em `sql/02_silver/`, gerando 
 
 | Script | Tabela Gerada | Tipo | Fontes de Origem | Conteúdo e Regras de Limpeza |
 |---|---|---|---|---|
+| `00` | `silver.team_map` | De-Para | BBD + Football-Data UK + FD.org + Brasileirão | Uma linha por id de clube em cada fonte, com o `team_id` canônico. As ligações saem dos próprios jogos: mesma liga, data e placar em duas fontes = mesmo jogo, então mesmos clubes. EPL usa o UUID da Big Balls, Brasileirão o nome do histórico (`silver.team_alias`), demais ligas o id do Football-Data.org. |
 | `01` | `silver.leagues` / `silver.competitions` | Dimensão | Seed + BBD + Football-Data | 12 competições unificadas (EPL, Brasileirão, La Liga, Serie A, etc.) com códigos ISO-2 e tiers. |
-| `02` | `silver.teams` | Dimensão | Transfermarkt + BBD + Ligas | Diretório global de clubes (796 clubes Transfermarkt + BBD + times de todas as ligas). |
+| `02` | `silver.teams` | Dimensão | `silver.team_map` | Um clube por `team_id` canônico (o de `silver.matches` e `silver.standings`), com o id ou nome em cada fonte, nome curto, sigla de 3 letras, país e escudo. |
 | `03` | `silver.players` | Dimensão | Transfermarkt + BBD | 50.149 atletas mundiais com datas de nascimento tipadas, biografia, posições e alturas. |
-| `04` | `silver.matches` | Fato Central | Football-Data UK + Brasileirão + FD.org + BBD | Fato unificado de partidas (> 25.000 jogos). Deduplicação por chave canônica, status padronizado (`finished`, `scheduled`), particionado por `DATE(kickoff_utc)`. |
+| `04` | `silver.matches` | Fato Central | Football-Data UK + Brasileirão + FD.org + BBD | Fato unificado de partidas (> 25.000 jogos). Um jogo visto por várias fontes é um (liga, temporada, mandante, visitante): fica a versão encerrada, depois a fonte prioritária da liga. Status padronizado (`finished`, `scheduled`), particionado por `DATE(kickoff_utc)`. |
 | `05` | `silver.team_matches` | Fato Desdobrado | `silver.matches` | 2 linhas por partida (mandante e visitante), pontuação (3/1/0) e gols para cálculo direto de forma esportiva. |
 | `06` | `silver.h2h` | Fato Satélite | `stored_matches_h2h` | Confrontos diretos históricos estritamente anteriores ao kickoff (EPL). |
 | `07` | `silver.match_weather` | Fato Satélite | `matches_weather` | Condições climáticas na arena da partida (temperatura, umidade, vento). |
@@ -21,14 +22,14 @@ As transformações estão versionadas e ordenadas em `sql/02_silver/`, gerando 
 | `09` | `silver.position_map` | Mapeamento | BBD | Mapeamento canônico de posições táticas. |
 | `10` | `silver.player_match_stats` | Fato Satélite | `stored_matches_stats_players` | Estatísticas individuais por atleta na partida (passes, desarmes, finalizações). |
 | `11` | `silver.map_team_identity` | De-Para | Todas as fontes | Resolução de identidade de nomes de clubes entre provedores e grafias. |
-| `12` | `silver.match_stats` | Fato Satélite | Football-Data.co.uk | Chutes a gol, faltas, escanteios e cartões amarelos/vermelhos (10 ligas europeias). |
-| `13` | `silver.match_odds` | Fato Satélite | Football-Data.co.uk | Odds pré-jogo 1X2 e Over/Under 2.5 gols (Bet365, Pinnacle, médias e máximas). |
+| `12` | `silver.match_stats` | Fato Satélite | Football-Data.co.uk | Chutes a gol, faltas, escanteios e cartões amarelos/vermelhos (10 ligas europeias), sob o `match_id` que `silver.matches` guardou. |
+| `13` | `silver.match_odds` | Fato Satélite | Football-Data.co.uk | Odds pré-jogo 1X2 (Bet365 na Europa; Pinnacle e média do mercado no Brasileirão), sob o `match_id` de `silver.matches`. |
 | `14` | `silver.match_tactics` | Fato Satélite | Brasileirão Histórico | Formações táticas mandante/visitante, técnicos e arena (2003-2026). |
 | `15` | `silver.player_valuations` | Fato Mercado | Transfermarkt | 656k registros históricos de valor de mercado em EUR por atleta ao longo do tempo. |
 | `16` | `silver.transfers` | Fato Mercado | Transfermarkt | 175k transferências históricas com clubes de origem/destino e taxas de transferência. |
 | `17` | `silver.player_gameweeks` | Fato Performance | Fantasy Premier League | 109k registros de gameweeks com métricas avançadas (xG, xA, minutos, ICT index, pontos). |
 | `18` | `silver.news_articles` | Fato Conteúdo | News RSS (ge, BBC, etc.) | 903 notícias esportivas completas, com corpo integral higienizado e timestamps UTC. |
-| `19` | `silver.standings` | Fato Classificação| Football-Data.org | Tabelas de classificação oficiais atualizadas das competições ativas. |
+| `19` | `silver.standings` | Fato Classificação| Football-Data.org | Tabelas de classificação oficiais das competições ativas, com o `team_id` canônico (`source_team_id` guarda o id do Football-Data.org). |
 | `20` | `report_row_counts` | Relatório | Todas as tabelas Silver | Auditoria instantânea de volumetria de toda a camada. |
 
 ---
@@ -63,6 +64,8 @@ A suíte de qualidade executa 23 testes automatizados após a construção da Si
 - **S17**: Valores de mercado e taxas de transferências não-negativos (`>= 0`).
 - **S18**: Notícias com corpo de texto preenchido e publicado válido.
 - **S19**: Minutos jogados no FPL dentro dos limites físicos da partida (`0 <= minutes <= 120`).
+- **S22**: Todo clube com jogos em duas fontes chega a um único `team_id` (`silver.team_map.unresolved`).
+- **S23**: Estatísticas e odds nas colunas certas, por liga: chutes no alvo acima dos chutes em no máximo 1% dos jogos, e o favorito da Bet365 vencendo ao menos 35% (uma coluna deslocada dá ~22%).
 
 ### Quarentenas e Avisos (`quality.occurrences`)
 - **S7**: Registra quarentena se `SAFE_CAST` retornar NULL para um valor bruto não-nulo.

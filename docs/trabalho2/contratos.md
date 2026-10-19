@@ -241,6 +241,20 @@ Para ler o BigQuery de outro projeto, a conta de serviço do backend precisa de
 `roles/bigquery.jobUser` no projeto e `roles/bigquery.dataViewer` em `stream`, `gold` e `silver`
 (as views da gold leem a silver). O Raphael concede (`PLATAFORMA_SA=<email> streaming/infra.sh`).
 
+**Bucket público**, sem conta no GCP: `https://storage.googleapis.com/foota-toota-505511/<arquivo>`.
+
+| Arquivo | O que tem |
+| --- | --- |
+| `_manifest.json` | `version`, `exported_at` e linhas por arquivo. Baixe de novo só quando `version` mudar |
+| `silver/teams.parquet` | Um clube por `team_id`, o mesmo de `matches`, `standings` e da gold, com o id de cada fonte, nome curto, sigla, país e escudo |
+| `silver/matches.parquet` | Um jogo por linha, todas as ligas; jogos vistos por várias fontes aparecem uma vez |
+| `silver/standings.parquet` | Classificação com o `team_id` canônico (`source_team_id` é o do Football-Data.org) |
+| `silver/match_stats.parquet`, `silver/match_odds.parquet` | Sempre com um `match_id` que existe em `matches` |
+| `gold/predictions.parquet` | `stream.predicoes`, no formato da seção 3 |
+
+O bucket é reexportado a cada `scripts/atualizar_partidas.sh`, que coleta partidas e classificação
+na mesma rodada.
+
 ## 6. O que cada um manda para o Raphael
 
 | Quem | O quê | Para |

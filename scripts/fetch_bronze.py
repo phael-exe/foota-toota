@@ -4,7 +4,10 @@
 Fontes e Ligas Cobertas:
 1. Football-Data.co.uk:
    - 10 ligas (Premier League, Championship, La Liga, Serie A, Bundesliga, Ligue 1, Eredivisie, Primeira Liga, Bélgica, Escócia)
-   - Temporadas: 2024-2025, 2023-2024, 2022-2023 com dados de partidas, estatísticas e odds.
+   - Temporadas: 2022-2023 até a atual (2026-2027) com dados de partidas, estatísticas e odds.
+   - Cada CSV é regravado com as colunas de bronze.ext_football_data_uk, escolhidas pelo nome do
+     cabeçalho: o BigQuery lê CSV pela posição e os arquivos mudam por liga e temporada (Referee só
+     nas ligas britânicas, HxG/AxG desde 2026-2027).
    - Brasileirão Série A (new/BRA.csv): 2012 até a atualidade, com odds de fechamento.
 2. Brasileirão Dataset (adaoduque):
    - Histórico completo de 2003 até a atualidade (>8.700 partidas com placar, técnicos, formação, arena).
@@ -19,8 +22,10 @@ Armazena em data/bronze/ e envia para gs://{GCS_BUCKET}/bronze/.
 
 from __future__ import annotations
 
+import csv
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+import io
 import json
 import os
 from pathlib import Path
@@ -34,6 +39,13 @@ import httpx
 ROOT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT_DIR / "data" / "bronze"
 CHECKPOINT_FILE = DATA_DIR / "_checkpoints" / "state.json"
+
+# Colunas de bronze.ext_football_data_uk, na ordem da tabela externa
+FOOTBALL_DATA_UK_COLUMNS = [
+    "Div", "Date", "Time", "HomeTeam", "AwayTeam", "FTHG", "FTAG", "FTR", "HTHG", "HTAG", "HTR",
+    "Referee", "HS", "AS", "HST", "AST", "HF", "AF", "HC", "AC", "HY", "AY", "HR", "AR",
+    "B365H", "B365D", "B365A",
+]
 
 
 def load_env() -> dict[str, str]:
@@ -71,8 +83,19 @@ def save_checkpoint(state: dict) -> None:
         json.dump(state, f, indent=2, ensure_ascii=False)
 
 
+def normalize_football_data_uk(content: str) -> str:
+    """Regrava o CSV com FOOTBALL_DATA_UK_COLUMNS, lidas pelo nome; coluna ausente sai vazia."""
+    out = io.StringIO()
+    writer = csv.DictWriter(out, fieldnames=FOOTBALL_DATA_UK_COLUMNS, lineterminator="\n")
+    writer.writeheader()
+    for row in csv.DictReader(io.StringIO(content)):
+        if row.get("Div"):
+            writer.writerow({col: row.get(col) or "" for col in FOOTBALL_DATA_UK_COLUMNS})
+    return out.getvalue()
+
+
 def fetch_football_data_uk(client: httpx.Client, state: dict) -> int:
-    """Baixa CSVs de 10 ligas europeias para 3 temporadas."""
+    """Baixa CSVs de 10 ligas europeias, de 2022-2023 até a temporada atual."""
     print("\n=== [1/4] Coletando Football-Data.co.uk (10 Ligas Européias) ===")
     leagues = [
         ("E0", "Premier_League"),
@@ -87,6 +110,8 @@ def fetch_football_data_uk(client: httpx.Client, state: dict) -> int:
         ("SC0", "Scottish_Premiership"),
     ]
     seasons = [
+        ("2627", "2026-2027"),
+        ("2526", "2025-2026"),
         ("2425", "2024-2025"),
         ("2324", "2023-2024"),
         ("2223", "2022-2023"),
@@ -100,17 +125,30 @@ def fetch_football_data_uk(client: httpx.Client, state: dict) -> int:
             out_dir.mkdir(parents=True, exist_ok=True)
             out_file = out_dir / "matches.csv"
 
-            url = f"https://www.football-data.co.uk/mmz4281/{s_code}/{l_code}.csv"
-            try:
-                resp = client.get(url, headers=headers, follow_redirects=True, timeout=20.0)
-                if resp.status_code == 200 and len(resp.text.strip()) > 0:
-                    content = resp.text.lstrip("\ufeff")
-                    lines = content.strip().splitlines()
-                    out_file.write_text(content, encoding="utf-8")
-                    total_saved += len(lines) - 1
-                    print(f"  ✓ {l_name} ({s_name}): {len(lines) - 1} partidas")
-            except Exception as e:
-                print(f"  ✗ Falha ao baixar {l_name} ({s_name}): {e}")
+            url = f"https://football-data.co.uk/mmz4281/{s_code}/{l_code}.csv"
+            content = None
+            for attempt in range(3):
+                try:
+                    resp = client.get(url, headers=headers, follow_redirects=True, timeout=60.0)
+                    if resp.status_code == 200 and len(resp.text.strip()) > 0:
+                        content = resp.text.lstrip("\ufeff")
+                        break
+                    print(f"  ✗ {l_name} ({s_name}): status {resp.status_code}")
+                except Exception as e:
+                    print(f"  ✗ Falha ao baixar {l_name} ({s_name}), tentativa {attempt + 1}: {e}")
+                time.sleep(5)
+            if content is None and out_file.exists():
+                # o arquivo de uma coleta anterior pode estar na ordem do site; normalizar um arquivo
+                # já normalizado não o altera
+                print(f"  ↺ {l_name} ({s_name}): mantendo o arquivo anterior, normalizado")
+                content = out_file.read_text(encoding="utf-8").lstrip("\ufeff")
+            if content is None:
+                continue
+            content = normalize_football_data_uk(content)
+            lines = content.strip().splitlines()
+            out_file.write_text(content, encoding="utf-8")
+            total_saved += len(lines) - 1
+            print(f"  ✓ {l_name} ({s_name}): {len(lines) - 1} partidas")
 
     state.setdefault("sources", {})["football_data_uk"] = {
         "status": "success",

@@ -134,6 +134,10 @@ def fetch_football_data_org_standings(env: dict[str, str]) -> None:
             url = f"https://api.football-data.org/v4/competitions/{code}/standings"
             try:
                 resp = client.get(url)
+                if resp.status_code == 429:
+                    print(f"  ⚠ Rate limit em {code}. Aguardando 61s para tentar de novo...")
+                    time.sleep(61)
+                    resp = client.get(url)
                 if resp.status_code == 200:
                     payload = resp.json()
                     standings = payload.get("standings", [])
@@ -144,9 +148,6 @@ def fetch_football_data_org_standings(env: dict[str, str]) -> None:
                             st["_season"] = payload.get("season", {})
                             f.write(json.dumps(st, ensure_ascii=False) + "\n")
                     print(f"  ✓ Classificação {name} ({code}) salva")
-                elif resp.status_code == 429:
-                    print(f"  ⚠ Rate limit em {code}. Aguardando 15s...")
-                    time.sleep(15)
                 else:
                     print(f"  ✗ {name} ({code}): status {resp.status_code}")
             except Exception as e:

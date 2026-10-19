@@ -1,5 +1,7 @@
 -- Official standings fact table (league tables across Tier 1 competitions).
--- Sourced from Football-Data.org API, unnested per team position.
+-- Sourced from Football-Data.org API, unnested per team position. Clubs carry the canonical
+-- team_id of silver.team_map, the one silver.matches uses; source_team_id and source_team_name
+-- keep what Football-Data.org calls them.
 
 CREATE OR REPLACE TABLE `PROJECT.silver.standings` AS
 WITH unnested AS (
@@ -28,7 +30,7 @@ WITH unnested AS (
     UNNEST(JSON_EXTRACT_ARRAY(`table`)) AS entry
 )
 SELECT
-    CASE competition_code
+    CASE u.competition_code
         WHEN 'PL'  THEN 'epl'
         WHEN 'BSA' THEN 'brasileirao_serie_a'
         WHEN 'PD'  THEN 'la_liga'
@@ -39,14 +41,19 @@ SELECT
         WHEN 'ELC' THEN 'championship'
         WHEN 'DED' THEN 'eredivisie'
         WHEN 'PPL' THEN 'primeira_liga'
-        ELSE LOWER(competition_code)
+        ELSE LOWER(u.competition_code)
     END AS league_id,
-    competition_code,
+    u.competition_code,
     competition_name,
+    EXTRACT(YEAR FROM SAFE_CAST(season_start_date AS DATE)) AS season,
     rank,
-    team_id,
-    team_name,
+    COALESCE(tm.team_id, u.team_id) AS team_id,
+    COALESCE(tm.team_name, u.team_name) AS team_name,
     team_short_name,
+    tm.tla AS team_tla,
+    tm.crest_url AS team_crest_url,
+    u.team_id AS source_team_id,
+    u.team_name AS source_team_name,
     played,
     won,
     draw,
@@ -56,8 +63,10 @@ SELECT
     goals_against,
     goal_difference,
     current_matchday,
-    batch_id,
-    source_file,
-    ingested_at,
+    u.batch_id,
+    u.source_file,
+    u.ingested_at,
     CURRENT_TIMESTAMP() AS transformed_at
-FROM unnested;
+FROM unnested u
+LEFT JOIN `PROJECT.silver.team_map` tm
+       ON tm.source_id = 'football_data_org' AND tm.raw_team_id = u.team_id;

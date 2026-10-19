@@ -1,7 +1,9 @@
 -- Matches conformed fact table across all leagues and sources.
--- Unifies BBD EPL matches (4,939 matches), Football-Data.co.uk (10 leagues x 3 seasons, plus
--- the Brazil file for the Brasileirao from 2025), Brasileirao Historico (8,785 matches, 2003-2024)
--- and Football-Data.org API (Tier 1 competitions except the EPL, which Big Balls covers).
+-- Unifies BBD EPL matches (4,939 matches), Football-Data.co.uk (10 leagues from 2022/23 to the
+-- current season, plus the Brazil file for the Brasileirao from 2025), Brasileirao Historico
+-- (8,785 matches, 2003-2024) and the Football-Data.org API (current season of 10 competitions).
+-- Clubs carry the canonical ids of silver.team_map, so one game seen by several sources meets
+-- itself below and is kept once.
 -- Partitioned by DATE(kickoff_utc), clustered by league_id, home_team_id.
 
 CREATE OR REPLACE TABLE `PROJECT.silver.matches`
@@ -61,23 +63,18 @@ fduk_matches AS (
             WHEN 'SC0' THEN 'scottish_premiership'
             ELSE LOWER(Div)
         END AS league_id,
-        HomeTeam AS home_team_id,
-        AwayTeam AS away_team_id,
-        HomeTeam AS home_team_name,
-        AwayTeam AS away_team_name,
+        COALESCE(th.team_id, HomeTeam) AS home_team_id,
+        COALESCE(ta.team_id, AwayTeam) AS away_team_id,
+        COALESCE(th.team_name, HomeTeam) AS home_team_name,
+        COALESCE(ta.team_name, AwayTeam) AS away_team_name,
+        -- the files give UK local time
         COALESCE(
-            SAFE.PARSE_TIMESTAMP('%d/%m/%Y %H:%M', CONCAT(Date, ' ', COALESCE(Time, '15:00'))),
-            SAFE.PARSE_TIMESTAMP('%d/%m/%y %H:%M', CONCAT(Date, ' ', COALESCE(Time, '15:00')))
+            SAFE.PARSE_TIMESTAMP('%d/%m/%Y %H:%M', CONCAT(Date, ' ', COALESCE(Time, '15:00')), 'Europe/London'),
+            SAFE.PARSE_TIMESTAMP('%d/%m/%y %H:%M', CONCAT(Date, ' ', COALESCE(Time, '15:00')), 'Europe/London')
         ) AS kickoff_utc,
-        CASE
-            WHEN SAFE_CAST(SUBSTR(Date, 7, 4) AS INT64) IS NOT NULL THEN
-                IF(SAFE_CAST(SUBSTR(Date, 4, 2) AS INT64) >= 8,
-                   SAFE_CAST(SUBSTR(Date, 7, 4) AS INT64),
-                   SAFE_CAST(SUBSTR(Date, 7, 4) AS INT64) - 1)
-            WHEN SAFE_CAST(SUBSTR(Date, 7, 2) AS INT64) IS NOT NULL THEN
-                2000 + SAFE_CAST(SUBSTR(Date, 7, 2) AS INT64) - IF(SAFE_CAST(SUBSTR(Date, 4, 2) AS INT64) >= 8, 0, 1)
-            ELSE 2024
-        END AS season,
+        -- the season of the file (season=2022-2023 is 2022): a July game opens the new season
+        -- in Belgium and Scotland, so the month says nothing
+        SAFE_CAST(REGEXP_EXTRACT(source_file, r'season=(\d{4})-') AS INT64) AS season,
         'finished' AS status,
         SAFE_CAST(FTHG AS INT64) AS score_home,
         SAFE_CAST(FTAG AS INT64) AS score_away,
@@ -99,9 +96,11 @@ fduk_matches AS (
         source_file,
         ingested_at
     FROM `PROJECT.bronze.football_data_uk`
+    LEFT JOIN `PROJECT.silver.team_map` th
+           ON th.source_id = 'football_data_uk' AND th.raw_team_id = HomeTeam
+    LEFT JOIN `PROJECT.silver.team_map` ta
+           ON ta.source_id = 'football_data_uk' AND ta.raw_team_id = AwayTeam
     WHERE HomeTeam IS NOT NULL AND AwayTeam IS NOT NULL
-      -- Drop EPL overlap if already covered by BBD
-      AND Div != 'E0'
 ),
 
 bra_matches AS (
@@ -208,10 +207,10 @@ fdorg_matches AS (
             WHEN 'PPL' THEN 'primeira_liga'
             ELSE LOWER(_competition_code)
         END AS league_id,
-        COALESCE(ah.team_id, CAST(JSON_VALUE(homeTeam, '$.id') AS STRING)) AS home_team_id,
-        COALESCE(aa.team_id, CAST(JSON_VALUE(awayTeam, '$.id') AS STRING)) AS away_team_id,
-        COALESCE(ah.team_id, JSON_VALUE(homeTeam, '$.name')) AS home_team_name,
-        COALESCE(aa.team_id, JSON_VALUE(awayTeam, '$.name')) AS away_team_name,
+        COALESCE(th.team_id, CAST(JSON_VALUE(homeTeam, '$.id') AS STRING)) AS home_team_id,
+        COALESCE(ta.team_id, CAST(JSON_VALUE(awayTeam, '$.id') AS STRING)) AS away_team_id,
+        COALESCE(th.team_name, JSON_VALUE(homeTeam, '$.name')) AS home_team_name,
+        COALESCE(ta.team_name, JSON_VALUE(awayTeam, '$.name')) AS away_team_name,
         SAFE_CAST(utcDate AS TIMESTAMP) AS kickoff_utc,
         -- the season starts in its first year: 2026/27 is 2026, not 2027 for games after January
         COALESCE(
@@ -242,18 +241,13 @@ fdorg_matches AS (
         source_file,
         ingested_at
     FROM `PROJECT.bronze.football_data_org_matches`
-    LEFT JOIN `PROJECT.silver.team_alias` ah
-           ON _competition_code = 'BSA' AND ah.league_id = 'brasileirao_serie_a'
-          AND ah.source_id = 'football_data_org' AND ah.raw_name = JSON_VALUE(homeTeam, '$.name')
-    LEFT JOIN `PROJECT.silver.team_alias` aa
-           ON _competition_code = 'BSA' AND aa.league_id = 'brasileirao_serie_a'
-          AND aa.source_id = 'football_data_org' AND aa.raw_name = JSON_VALUE(awayTeam, '$.name')
+    LEFT JOIN `PROJECT.silver.team_map` th
+           ON th.source_id = 'football_data_org'
+          AND th.raw_team_id = CAST(JSON_VALUE(homeTeam, '$.id') AS STRING)
+    LEFT JOIN `PROJECT.silver.team_map` ta
+           ON ta.source_id = 'football_data_org'
+          AND ta.raw_team_id = CAST(JSON_VALUE(awayTeam, '$.id') AS STRING)
     WHERE homeTeam IS NOT NULL AND awayTeam IS NOT NULL
-      -- Big Balls already holds the whole EPL fixture list; here the same games carry other ids
-      AND _competition_code != 'PL'
-      -- Include future scheduled games or cups (CL) not covered by static CSVs. Finished
-      -- Brasileirao games stay too: brasileirao_fixtures below settles the overlap.
-      AND (LOWER(status) != 'finished' OR _competition_code IN ('CL', 'BSA'))
 ),
 
 all_matches AS (
@@ -277,24 +271,38 @@ deduped AS (
     FROM all_matches
 ),
 
--- The Brasileirao arrives from three sources under different match ids. A season is a double
--- round robin, so (season, home, away) names one game: keep its finished version, then the
--- source with the longest history.
-brasileirao_fixtures AS (
+-- A game held by several sources under different match ids is one (league, season, home, away):
+-- a domestic league is a double round robin. Keep its finished version first, then the source
+-- ranked first for the league: the longest history for the Brasileirao, the Big Balls ids of the
+-- PoC for the EPL, the stats and odds of Football-Data.co.uk elsewhere. Football-Data.org fills
+-- what the files do not hold yet: fixtures, and results newer than the last file. Outside the
+-- Brasileirao, rows of one source are never dropped against each other (the Scottish split and
+-- the Belgian play-offs repeat a fixture within a season). The Champions League has a single
+-- source and a knockout phase, so it is kept as it comes.
+ranked AS (
     SELECT *,
-        IF(league_id = 'brasileirao_serie_a',
-           ROW_NUMBER() OVER(
-               PARTITION BY league_id, season, home_team_id, away_team_id
-               ORDER BY status = 'finished' DESC,
-                        CASE source_id
-                            WHEN 'brasileirao_historico' THEN 1
-                            WHEN 'football_data_uk'      THEN 2
-                            ELSE 3
-                        END
-           ),
-           1) AS fixture_rn
+        CASE
+            WHEN league_id = 'brasileirao_serie_a' THEN
+                CASE source_id WHEN 'brasileirao_historico' THEN 1 WHEN 'football_data_uk' THEN 2 ELSE 3 END
+            WHEN league_id = 'epl' THEN
+                CASE source_id WHEN 'bigballs' THEN 1 WHEN 'football_data_uk' THEN 2 ELSE 3 END
+            ELSE
+                CASE source_id WHEN 'football_data_uk' THEN 1 ELSE 2 END
+        END AS source_rank
     FROM deduped
     WHERE rn = 1
+),
+
+fixtures AS (
+    SELECT *,
+        ROW_NUMBER() OVER (
+            PARTITION BY league_id, season, home_team_id, away_team_id
+            ORDER BY status = 'finished' DESC, source_rank
+        ) AS fixture_rn,
+        MIN(IF(status = 'finished', source_rank, NULL)) OVER fixture AS best_finished_rank,
+        MIN(source_rank) OVER fixture AS best_rank
+    FROM ranked
+    WINDOW fixture AS (PARTITION BY league_id, season, home_team_id, away_team_id)
 )
 SELECT
     match_id,
@@ -322,5 +330,10 @@ SELECT
     source_file,
     ingested_at,
     CURRENT_TIMESTAMP() AS transformed_at
-FROM brasileirao_fixtures
-WHERE fixture_rn = 1;
+FROM fixtures
+WHERE CASE
+    WHEN league_id = 'champions_league' THEN TRUE
+    WHEN league_id = 'brasileirao_serie_a' THEN fixture_rn = 1
+    ELSE source_rank = COALESCE(best_finished_rank, best_rank)
+         AND (best_finished_rank IS NULL OR status = 'finished')
+END;
