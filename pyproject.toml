@@ -21,12 +21,14 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "fastapi>=0.146.0",
     "pre-commit>=4.6.2",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
     "respx>=0.23.1",
     "ruff>=0.16.5",
+    "scikit-learn==1.6.1",
     "ty>=0.0.77",
 ]
 
