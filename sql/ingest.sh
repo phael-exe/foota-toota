@@ -25,6 +25,9 @@ fi
 : "${GCS_BUCKET:?set GCS_BUCKET in .env}"
 GCP_REGION="${GCP_REGION:-US}"
 GCLOUD="${GCLOUD_BIN:-gcloud}"
+if [[ "$GCLOUD" == /* ]]; then
+    export PATH="$(dirname "$GCLOUD"):$PATH"
+fi
 
 src="${1:-$root/data/epl}"
 if [ ! -d "$src" ]; then

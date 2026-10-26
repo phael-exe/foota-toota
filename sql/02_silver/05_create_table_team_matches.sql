@@ -1,7 +1,9 @@
--- One row per club per match (9,878 = 2 x 4,939), so form can be computed with a single scan.
--- Points are 3/1/0 on finished matches only; NULL on scheduled ones. Never 0 for a scheduled
--- match, because 0 is a real result.
-CREATE OR REPLACE TABLE `PROJECT.silver.team_matches` AS
+-- One row per club per match (2 rows per match), so form can be computed with a single scan.
+-- Points are 3/1/0 on finished matches only; NULL on scheduled ones.
+-- Partitioned by DATE(kickoff_utc), clustered by league_id, team_id.
+CREATE OR REPLACE TABLE `PROJECT.silver.team_matches`
+PARTITION BY DATE(kickoff_utc)
+CLUSTER BY league_id, team_id, opponent_id AS
 SELECT
     match_id,
     league_id,
@@ -29,17 +31,17 @@ SELECT
     season,
     kickoff_utc,
     status,
-    away_team_id,
-    home_team_id,
-    FALSE,
-    score_away,
-    score_home,
+    away_team_id AS team_id,
+    home_team_id AS opponent_id,
+    FALSE AS is_home,
+    score_away AS goals_for,
+    score_home AS goals_against,
     CASE WHEN status = 'finished' THEN
         CASE
             WHEN score_away > score_home THEN 3
             WHEN score_away = score_home THEN 1
             ELSE 0
         END
-    END,
-    CURRENT_TIMESTAMP()
+    END AS points,
+    CURRENT_TIMESTAMP() AS transformed_at
 FROM `PROJECT.silver.matches`;

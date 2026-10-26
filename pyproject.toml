@@ -9,6 +9,10 @@ requires-python = ">=3.12"
 authors = [{ name = "André Koraleski", email = "andrekorale@gmail.com" }]
 keywords = ["football", "sports-data", "bigballsdata", "pitchside"]
 dependencies = [
+    "google-cloud-bigquery[bqstorage,pandas]>=3.45.2",
+    "google-cloud-pubsub>=2.43.0",
+    "google-cloud-storage>=3.14.1",
+    "httpx>=0.28.1",
     "pitchside>=0.1.1",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
@@ -17,12 +21,14 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "fastapi>=0.146.0",
     "pre-commit>=4.6.2",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
     "respx>=0.23.1",
     "ruff>=0.16.5",
+    "scikit-learn==1.6.1",
     "ty>=0.0.77",
 ]
 

@@ -52,12 +52,15 @@ SELECT
     COALESCE(hf.history_count, 0) = 5
         AND COALESCE(af.history_count, 0) = 5 AS has_full_history,
     m.outcome AS label_outcome,
+    -- C5: split by time, never at random. Whole seasons of each league, so a calendar-year
+    -- league (Brasileirao) and an August-May one (EPL) both get a full EVAL and TEST season:
+    -- current and previous season = TEST, the one before = EVAL, everything older = TRAIN.
     CASE
-        WHEN m.status = 'scheduled'                  THEN 'PREDICT'
-        WHEN m.kickoff_utc < TIMESTAMP('2024-07-01') THEN 'TRAIN'
-        WHEN m.kickoff_utc < TIMESTAMP('2025-07-01') THEN 'EVAL'
-        ELSE 'TEST'
-    END AS split_set,   -- C5: split by date, never at random
+        WHEN m.status = 'scheduled' THEN 'PREDICT'
+        WHEN m.season >= MAX(m.season) OVER (PARTITION BY m.league_id) - 1 THEN 'TEST'
+        WHEN m.season =  MAX(m.season) OVER (PARTITION BY m.league_id) - 2 THEN 'EVAL'
+        ELSE 'TRAIN'
+    END AS split_set,
     CURRENT_TIMESTAMP() AS computed_at
 FROM `PROJECT.silver.matches` m
 LEFT JOIN `PROJECT.gold.team_form` hf

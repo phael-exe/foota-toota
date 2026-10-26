@@ -24,6 +24,9 @@ fi
 : "${GCP_PROJECT_ID:?set GCP_PROJECT_ID in .env}"
 : "${GCS_BUCKET:?set GCS_BUCKET in .env}"
 BQ="${BQ_BIN:-bq}"
+if [[ "$BQ" == /* ]]; then
+    export PATH="$(dirname "$BQ"):$PATH"
+fi
 
 if [ "$#" -eq 0 ]; then
     echo "usage: $0 <script.sql|folder> ..." >&2

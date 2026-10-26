@@ -1,0 +1,76 @@
+﻿source_id,recurso,campo_nativo,tipo_documentado_ou_observado,significado,destino_sugerido,evidencia_url,data_consulta
+football_data_org,Objeto Match v4; campos selecionados,id,integer,ID do jogo,partida.match_id,https://docs.football-data.org/general/v4/match.html,2026-09-14
+football_data_org,Objeto Match v4; campos selecionados,utcDate,string datetime,Início em UTC,partida.kickoff_utc,https://docs.football-data.org/general/v4/match.html,2026-09-14
+football_data_org,Objeto Match v4; campos selecionados,status,string,Estado original,partida.status,https://docs.football-data.org/general/v4/match.html,2026-09-14
+football_data_org,Objeto Match v4; campos selecionados,competition.id,integer,Competição,partida.competition_id,https://docs.football-data.org/general/v4/match.html,2026-09-14
+football_data_org,Objeto Match v4; campos selecionados,season.id,integer,Edição,partida.season_id,https://docs.football-data.org/general/v4/match.html,2026-09-14
+football_data_org,Objeto Match v4; campos selecionados,homeTeam.id,integer,Mandante,partida.home_team_id,https://docs.football-data.org/general/v4/match.html,2026-09-14
+football_data_org,Objeto Match v4; campos selecionados,awayTeam.id,integer,Visitante,partida.away_team_id,https://docs.football-data.org/general/v4/match.html,2026-09-14
+football_data_org,Objeto Match v4; campos selecionados,matchday,integer,Rodada,partida.round,https://docs.football-data.org/general/v4/match.html,2026-09-14
+football_data_org,Objeto Match v4; campos selecionados,stage,string,Fase,partida.stage,https://docs.football-data.org/general/v4/match.html,2026-09-14
+football_data_org,Objeto Match v4; campos selecionados,attendance,integer/null,Público,partida.attendance,https://docs.football-data.org/general/v4/match.html,2026-09-14
+football_data_org,Objeto Match v4; campos selecionados,venue,string/null,Nome do local,estadio.name,https://docs.football-data.org/general/v4/match.html,2026-09-14
+football_data_org,Objeto Match v4; campos selecionados,lastUpdated,string datetime,Revisão da fonte,proveniencia.source_updated_at,https://docs.football-data.org/general/v4/match.html,2026-09-14
+sportmonks,Entidade Fixture v3; campos selecionados,id,integer,ID do jogo,partida.match_id,https://docs.sportmonks.com/v3/endpoints-and-entities/entities/fixture,2026-09-14
+sportmonks,Entidade Fixture v3; campos selecionados,league_id,integer,Liga,partida.competition_id,https://docs.sportmonks.com/v3/endpoints-and-entities/entities/fixture,2026-09-14
+sportmonks,Entidade Fixture v3; campos selecionados,season_id,integer,Temporada,partida.season_id,https://docs.sportmonks.com/v3/endpoints-and-entities/entities/fixture,2026-09-14
+sportmonks,Entidade Fixture v3; campos selecionados,stage_id,integer,Fase,partida.stage,https://docs.sportmonks.com/v3/endpoints-and-entities/entities/fixture,2026-09-14
+sportmonks,Entidade Fixture v3; campos selecionados,group_id,integer/null,Grupo,classificacao.group_id,https://docs.sportmonks.com/v3/endpoints-and-entities/entities/fixture,2026-09-14
+sportmonks,Entidade Fixture v3; campos selecionados,aggregate_id,integer/null,Eliminatória agregada,preservar no bruto,https://docs.sportmonks.com/v3/endpoints-and-entities/entities/fixture,2026-09-14
+sportmonks,Entidade Fixture v3; campos selecionados,state_id,integer,Código de estado,partida.status,https://docs.sportmonks.com/v3/endpoints-and-entities/entities/fixture,2026-09-14
+sportmonks,Entidade Fixture v3; campos selecionados,round_id,integer/null,Rodada,partida.round,https://docs.sportmonks.com/v3/endpoints-and-entities/entities/fixture,2026-09-14
+sportmonks,Entidade Fixture v3; campos selecionados,venue_id,integer/null,Local,partida.stadium_id,https://docs.sportmonks.com/v3/endpoints-and-entities/entities/fixture,2026-09-14
+sportmonks,Entidade Fixture v3; campos selecionados,name,string/null,Descrição dos participantes,preservar no bruto,https://docs.sportmonks.com/v3/endpoints-and-entities/entities/fixture,2026-09-14
+sportmonks,Entidade Fixture v3; campos selecionados,starting_at,date/null,Início; confirmar fuso,partida.kickoff_utc,https://docs.sportmonks.com/v3/endpoints-and-entities/entities/fixture,2026-09-14
+sportmonks,Entidade Fixture v3; campos selecionados,result_info,string/null,Resultado textual,preservar no bruto,https://docs.sportmonks.com/v3/endpoints-and-entities/entities/fixture,2026-09-14
+sportmonks,Entidade Fixture v3; campos selecionados,leg,string,Perna da eliminatória; exige parser,partida.leg,https://docs.sportmonks.com/v3/endpoints-and-entities/entities/fixture,2026-09-14
+sportmonks,Entidade Fixture v3; campos selecionados,length,integer/null,Duração prevista em minutos,preservar no bruto,https://docs.sportmonks.com/v3/endpoints-and-entities/entities/fixture,2026-09-14
+statsbomb_open,competitions.json; nomes observados na coleção,competition_id,integer,ID da competição,competicao.competition_id,https://raw.githubusercontent.com/hudl/open-data/master/data/competitions.json,2026-09-14
+statsbomb_open,competitions.json; nomes observados na coleção,season_id,integer,ID da temporada,competicao.season_id,https://raw.githubusercontent.com/hudl/open-data/master/data/competitions.json,2026-09-14
+statsbomb_open,competitions.json; nomes observados na coleção,country_name,string,País/região; continente não vira código de país,competicao.country_code quando aplicável,https://raw.githubusercontent.com/hudl/open-data/master/data/competitions.json,2026-09-14
+statsbomb_open,competitions.json; nomes observados na coleção,competition_name,string,Nome da competição,competicao.name,https://raw.githubusercontent.com/hudl/open-data/master/data/competitions.json,2026-09-14
+statsbomb_open,competitions.json; nomes observados na coleção,competition_gender,string,Categoria de gênero,competicao.gender_category,https://raw.githubusercontent.com/hudl/open-data/master/data/competitions.json,2026-09-14
+statsbomb_open,competitions.json; nomes observados na coleção,competition_youth,boolean,Indicador de base,competicao.age_category,https://raw.githubusercontent.com/hudl/open-data/master/data/competitions.json,2026-09-14
+statsbomb_open,competitions.json; nomes observados na coleção,competition_international,boolean,Natureza internacional,preservar no bruto,https://raw.githubusercontent.com/hudl/open-data/master/data/competitions.json,2026-09-14
+statsbomb_open,competitions.json; nomes observados na coleção,season_name,string,Rótulo da temporada,competicao.season_label,https://raw.githubusercontent.com/hudl/open-data/master/data/competitions.json,2026-09-14
+statsbomb_open,competitions.json; nomes observados na coleção,match_updated,string datetime,Atualização de jogos da coleção,proveniencia.source_updated_at,https://raw.githubusercontent.com/hudl/open-data/master/data/competitions.json,2026-09-14
+statsbomb_open,competitions.json; nomes observados na coleção,match_available_360,string datetime/null,Disponibilidade da coleção 360; não booleano,preservar no bruto,https://raw.githubusercontent.com/hudl/open-data/master/data/competitions.json,2026-09-14
+newsapi,Objeto de artigo em articles[] de /v2/everything,source.id,string/null,ID do publicador,proveniencia.source_record_id do publicador,https://newsapi.org/docs/endpoints/everything,2026-09-14
+newsapi,Objeto de artigo em articles[] de /v2/everything,source.name,string,Publicador,noticia.publisher,https://newsapi.org/docs/endpoints/everything,2026-09-14
+newsapi,Objeto de artigo em articles[] de /v2/everything,author,string/null,Autoria,noticia.author,https://newsapi.org/docs/endpoints/everything,2026-09-14
+newsapi,Objeto de artigo em articles[] de /v2/everything,title,string,Título,noticia.title,https://newsapi.org/docs/endpoints/everything,2026-09-14
+newsapi,Objeto de artigo em articles[] de /v2/everything,description,string/null,Descrição,noticia.summary,https://newsapi.org/docs/endpoints/everything,2026-09-14
+newsapi,Objeto de artigo em articles[] de /v2/everything,url,string,URL da matéria,noticia.canonical_url,https://newsapi.org/docs/endpoints/everything,2026-09-14
+newsapi,Objeto de artigo em articles[] de /v2/everything,urlToImage,string/null,Imagem relacionada,midia.thumbnail_url,https://newsapi.org/docs/endpoints/everything,2026-09-14
+newsapi,Objeto de artigo em articles[] de /v2/everything,publishedAt,string datetime,Publicação UTC,noticia.published_at,https://newsapi.org/docs/endpoints/everything,2026-09-14
+newsapi,Objeto de artigo em articles[] de /v2/everything,content,string/null,Trecho truncado; não texto integral,preservar trecho autorizado,https://newsapi.org/docs/endpoints/everything,2026-09-14
+thenewsapi,Objeto de artigo; o envelope varia por endpoint,uuid,string,ID da matéria no agregador,proveniencia.source_record_id,https://www.thenewsapi.com/documentation,2026-09-14
+thenewsapi,Objeto de artigo; o envelope varia por endpoint,title,string,Título,noticia.title,https://www.thenewsapi.com/documentation,2026-09-14
+thenewsapi,Objeto de artigo; o envelope varia por endpoint,description,string,Metadescrição,noticia.summary,https://www.thenewsapi.com/documentation,2026-09-14
+thenewsapi,Objeto de artigo; o envelope varia por endpoint,snippet,string,Trecho inicial,preservar trecho autorizado,https://www.thenewsapi.com/documentation,2026-09-14
+thenewsapi,Objeto de artigo; o envelope varia por endpoint,url,string,URL da matéria,noticia.canonical_url,https://www.thenewsapi.com/documentation,2026-09-14
+thenewsapi,Objeto de artigo; o envelope varia por endpoint,image_url,string,Imagem,midia.thumbnail_url,https://www.thenewsapi.com/documentation,2026-09-14
+thenewsapi,Objeto de artigo; o envelope varia por endpoint,language,string,Idioma da fonte,noticia.language,https://www.thenewsapi.com/documentation,2026-09-14
+thenewsapi,Objeto de artigo; o envelope varia por endpoint,published_at,string datetime,Publicação,noticia.published_at,https://www.thenewsapi.com/documentation,2026-09-14
+thenewsapi,Objeto de artigo; o envelope varia por endpoint,source,string,Domínio do publicador,noticia.publisher,https://www.thenewsapi.com/documentation,2026-09-14
+thenewsapi,Objeto de artigo; o envelope varia por endpoint,categories,array[string],Categorias atribuídas à fonte,preservar no bruto,https://www.thenewsapi.com/documentation,2026-09-14
+odds_api,Objeto de evento com bookmakers; preços dependem de oddsFormat,id,string,Evento,partida.match_id,https://the-odds-api.com/liveapi/guides/v4/,2026-09-14
+odds_api,Objeto de evento com bookmakers; preços dependem de oddsFormat,sport_key,string,Esporte/liga na API,competicao.competition_id,https://the-odds-api.com/liveapi/guides/v4/,2026-09-14
+odds_api,Objeto de evento com bookmakers; preços dependem de oddsFormat,commence_time,string datetime,Início,partida.kickoff_utc,https://the-odds-api.com/liveapi/guides/v4/,2026-09-14
+odds_api,Objeto de evento com bookmakers; preços dependem de oddsFormat,home_team,string,Nome do mandante; resolver ID,partida.home_team_id,https://the-odds-api.com/liveapi/guides/v4/,2026-09-14
+odds_api,Objeto de evento com bookmakers; preços dependem de oddsFormat,away_team,string,Nome do visitante; resolver ID,partida.away_team_id,https://the-odds-api.com/liveapi/guides/v4/,2026-09-14
+odds_api,Objeto de evento com bookmakers; preços dependem de oddsFormat,bookmakers[].key,string,Casa,odd.bookmaker,https://the-odds-api.com/liveapi/guides/v4/,2026-09-14
+odds_api,Objeto de evento com bookmakers; preços dependem de oddsFormat,bookmakers[].last_update,string datetime,Atualização da casa,proveniencia.source_updated_at,https://the-odds-api.com/liveapi/guides/v4/,2026-09-14
+odds_api,Objeto de evento com bookmakers; preços dependem de oddsFormat,bookmakers[].markets[].key,string,Mercado,odd.market,https://the-odds-api.com/liveapi/guides/v4/,2026-09-14
+odds_api,Objeto de evento com bookmakers; preços dependem de oddsFormat,bookmakers[].markets[].last_update,string datetime,Atualização do mercado quando presente,odd.quoted_at,https://the-odds-api.com/liveapi/guides/v4/,2026-09-14
+odds_api,Objeto de evento com bookmakers; preços dependem de oddsFormat,bookmakers[].markets[].outcomes[].name,string,Seleção,odd.selection,https://the-odds-api.com/liveapi/guides/v4/,2026-09-14
+odds_api,Objeto de evento com bookmakers; preços dependem de oddsFormat,bookmakers[].markets[].outcomes[].price,number,Preço; solicitar formato decimal,odd.decimal_odds,https://the-odds-api.com/liveapi/guides/v4/,2026-09-14
+odds_api,Objeto de evento com bookmakers; preços dependem de oddsFormat,bookmakers[].markets[].outcomes[].point,number,Linha quando aplicável,odd.line,https://the-odds-api.com/liveapi/guides/v4/,2026-09-14
+youtube,Recurso videos; solicitar parts correspondentes,id,string,ID do vídeo,proveniencia.source_record_id,https://developers.google.com/youtube/v3/docs/videos,2026-09-14
+youtube,Recurso videos; solicitar parts correspondentes,snippet.title,string,Título,midia.title,https://developers.google.com/youtube/v3/docs/videos,2026-09-14
+youtube,Recurso videos; solicitar parts correspondentes,snippet.description,string,Descrição,preservar texto autorizado,https://developers.google.com/youtube/v3/docs/videos,2026-09-14
+youtube,Recurso videos; solicitar parts correspondentes,snippet.publishedAt,string datetime,Publicação,midia.published_at,https://developers.google.com/youtube/v3/docs/videos,2026-09-14
+youtube,Recurso videos; solicitar parts correspondentes,snippet.channelId,string,Canal de origem,preservar ID do canal,https://developers.google.com/youtube/v3/docs/videos,2026-09-14
+youtube,Recurso videos; solicitar parts correspondentes,snippet.channelTitle,string,Nome do canal,midia.publisher,https://developers.google.com/youtube/v3/docs/videos,2026-09-14
+youtube,Recurso videos; solicitar parts correspondentes,snippet.thumbnails,string-keyed object,URLs e dimensões por variante,midia.thumbnail_url,https://developers.google.com/youtube/v3/docs/videos,2026-09-14
+youtube,Recurso videos; solicitar parts correspondentes,contentDetails.duration,string ISO 8601,Duração,preservar duração normalizada,https://developers.google.com/youtube/v3/docs/videos,2026-09-14
