@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Coletor do Trabalho 2: publica eventos de partida no tópico `eventos`.
+"""Coletor: publica eventos de partida no tópico `eventos`.
 
-Dois modos, mesmo formato de evento (contrato em docs/trabalho2/contratos.md):
+Dois modos, mesmo formato de evento (contrato em docs/arquitetura/contratos.md):
 
   live    consulta o Football-Data.org e publica só as partidas que mudaram
           desde a consulta anterior. O último evento de cada partida fica num

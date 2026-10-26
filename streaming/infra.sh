@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cria a infraestrutura de streaming do Trabalho 2 no GCP. Pode rodar de novo: o que já existe
+# Cria a infraestrutura de streaming no GCP. Pode rodar de novo: o que já existe
 # fica como está.
 #
 #   streaming/infra.sh

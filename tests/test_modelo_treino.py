@@ -1,4 +1,4 @@
-"""Treino e registro dos modelos do Trabalho 2 (modelo/treinar.py)."""
+"""Treino e registro dos modelos (modelo/treinar.py)."""
 
 from __future__ import annotations
 

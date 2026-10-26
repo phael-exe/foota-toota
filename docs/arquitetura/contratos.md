@@ -1,11 +1,9 @@
-# Trabalho 2: contratos entre coleta, modelo e plataforma
+# Contratos entre coleta, modelo e plataforma
 
 Este documento é a fonte da verdade para quem integra com o pipeline de streaming do Foota Toota:
 nomes de tópicos e assinaturas, formato de cada mensagem, tabelas, rotas e permissões. Ele foi
 escrito para ser lido por pessoas e pelos agentes de código de cada integrante. Se algo aqui
 mudar, muda primeiro aqui.
-
-Visão geral e divisão de tarefas: `Foota-Toota-Trabalho-2-Arquitetura.pdf`.
 
 | Quem | Responsável por |
 | --- | --- |
@@ -40,7 +38,7 @@ curl / Postman ──> API do André  POST /predict                             
 | Tópico | `predicoes-dlq` | Predições que o BigQuery recusou 5 vezes |
 | Assinatura | `eventos-dataflow` | Pull, consumida pelo Dataflow |
 | Assinatura | `eventos-bigquery` | Grava o evento bruto em `stream.eventos_brutos` |
-| Assinatura | `eventos-api` | Push para `POST /pubsub` do André (criada quando a URL existir) |
+| Assinatura | `eventos-api` | Push para `POST /pubsub` da API do modelo |
 | Assinatura | `predicoes-bigquery` | Grava a predição em `stream.predicoes` |
 | Assinatura | `predicoes-plataforma` | Push para o backend do Wagner (criada quando a URL existir) |
 | Assinatura | `predicoes-dlq-sub` | Pull, para inspecionar predições recusadas |
@@ -191,7 +189,7 @@ Um serviço Cloud Run com duas rotas, as duas chamando a mesma função de predi
 
 | Rota | Quem chama | Entrada | Saída |
 | --- | --- | --- | --- |
-| `POST /predict` | curl/Postman na demo (vale 30% da nota) | JSON com os dados da partida | A predição, no formato da seção 3, em JSON |
+| `POST /predict` | curl/Postman na demo | JSON com os dados da partida | A predição, no formato da seção 3, em JSON |
 | `POST /pubsub` | Push da assinatura `eventos-api` | Envelope da seção 2 | 204; publica a predição em `predicoes` |
 
 Sugestão para a entrada do `/predict`: aceitar `{"match_id": "fdorg_555047"}` e buscar as features
@@ -311,7 +309,6 @@ Há dois jeitos de fazer isso no Cloud Run. Se o serviço exige autenticação, 
 
 ## 7. Decisões do grupo (16/10)
 
-- **Apresentação: no máximo 10 minutos** (enunciado do T2 e slide 57). Os 5 minutos eram do T1.
 - **Um modelo por liga.** O `model_name` diz a liga, ex. `boosted_tree_brasileirao` e
   `boosted_tree_epl`; a gold já tem uma tabela de features por liga
   (`gold.match_features_brasileirao` e `gold.match_features_epl`).
@@ -324,7 +321,7 @@ Há dois jeitos de fazer isso no Cloud Run. Se o serviço exige autenticação, 
   pode passar a guardá-lo com o id de outra fonte; a `gold.predicoes_avaliadas` já cobre isso,
   porque pega o resultado pelo id do stream.
 - **Região:** tudo o que é regional em `us-central1` (Pub/Sub, Dataflow, Cloud Run, Scheduler). O
-  BigQuery fica na multi-região `US`, que inclui `us-central1`; é onde está o batch do T1.
+  BigQuery fica na multi-região `US`, que inclui `us-central1`; é onde está o batch.
 
 ## 8. Operação
 

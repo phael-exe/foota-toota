@@ -1,11 +1,11 @@
 # Demo da parte do modelo (André)
 
-Roteiro da parte do modelo na apresentação do T2: `/predict` ao vivo, o stream gravando predição x
-real, e o ciclo de MLOps no Vertex AI. Contrato e arquitetura: [`contratos.md`](contratos.md).
+Roteiro da demonstração do modelo: `/predict` ao vivo, o stream gravando predição x real, e o
+ciclo de MLOps no Vertex AI. Contrato e arquitetura: [`contratos.md`](contratos.md).
 
 API: `https://modelo-api-3gvoh2dyuq-uc.a.run.app` (Cloud Run `modelo-api`, projeto `pdm-andre-2026`).
 
-## Antes de apresentar
+## Antes da demonstração
 
 - **Na véspera, com o Raphael:** gold atualizada (`scripts/atualizar_partidas.sh`, para as features
   das próximas rodadas incluírem os jogos do fim de semana), assinatura `eventos-api` criada e
@@ -26,7 +26,7 @@ API: `https://modelo-api-3gvoh2dyuq-uc.a.run.app` (Cloud Run `modelo-api`, proje
   - [Vertex AI Experiments](https://console.cloud.google.com/vertex-ai/experiments?project=pdm-andre-2026)
   - [BigQuery: dataset `modelo`](https://console.cloud.google.com/bigquery?project=pdm-andre-2026&p=pdm-andre-2026&d=modelo&page=dataset)
 
-## 1. `/predict` (30% da nota)
+## 1. `/predict`
 
 Cruzeiro x Remo, Brasileirão, rodada 32, sexta 23/10 às 20h (Brasília):
 
@@ -135,7 +135,8 @@ No Brasileirão a acurácia passa o "sempre mandante" por menos de um ponto, den
 partidas; o ganho que conta é a log loss, a qualidade das probabilidades que a plataforma mostra. Na
 EPL o ganho aparece nas duas medidas. Empate quase nunca é o resultado mais provável: o modelo do
 Brasileirão aponta empate em 10 das partidas de TEST (e o mandante em umas 625), o da EPL em
-nenhuma, como no T1. A probabilidade de empate está na resposta, só raramente é a maior.
+nenhuma, como no antigo modelo do BigQuery ML. A probabilidade de empate está na resposta, só
+raramente é a maior.
 
 ## Se algo falhar
 

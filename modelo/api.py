@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""API do modelo do Trabalho 2: prevê o resultado das partidas.
+"""API do modelo: prevê o resultado das partidas.
 
-Um serviço Cloud Run com as rotas da seção 4 de docs/trabalho2/contratos.md,
+Um serviço Cloud Run com as rotas da seção 4 de docs/arquitetura/contratos.md,
 que chamam a mesma função de predição:
 
   POST /predict  {"match_id": "fdorg_555047"}: devolve a predição no formato
@@ -62,7 +62,7 @@ DADOS = "https://storage.googleapis.com/foota-toota-505511"
 CLASSES = ("home", "draw", "away")
 AGENDADA = {"TIMED", "SCHEDULED"}
 
-# Ordem canônica: a do SELECT do T1 (sql/06_model) e do array que o modelo
+# Ordem canônica: a do SELECT de sql/06_model e do array que o modelo
 # recebe. Mudar a ordem exige retreinar.
 FEATURES = (
     "home_avg_points_last_5",

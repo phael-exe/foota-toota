@@ -1,4 +1,4 @@
--- Batch and stream side by side (Trabalho 2): every silver match (origem = 'batch') stacked on
+-- Batch and stream side by side: every silver match (origem = 'batch') stacked on
 -- the latest state of each streamed match (origem = 'stream'). Stream clubs go through
 -- silver.team_alias like silver's own Football-Data.org rows, so a Brasileirao fixture carries
 -- the same team ids in both halves. Demo: the stream half grows while the batch stays put.

@@ -1,7 +1,7 @@
 -- Predictions the model API publishes on the `predicoes` topic, written by the Pub/Sub
 -- BigQuery subscription `predicoes-bigquery` (use_table_schema: each JSON field lands in the
 -- column of the same name, unknown fields are dropped). The topic keeps a message for days
--- only; this table is the history the platform reads. Contract: docs/trabalho2/contratos.md.
+-- only; this table is the history the platform reads. Contract: docs/arquitetura/contratos.md.
 -- Partitioned by DATE(predicted_at), clustered by match_id. Created once.
 CREATE TABLE IF NOT EXISTS `PROJECT.stream.predicoes` (
     prediction_id     STRING    NOT NULL,

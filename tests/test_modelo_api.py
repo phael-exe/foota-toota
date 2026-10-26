@@ -1,4 +1,4 @@
-"""API do modelo do Trabalho 2 (modelo/api.py)."""
+"""API do modelo (modelo/api.py)."""
 
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pipeline de streaming do Trabalho 2 (Apache Beam, roda no Dataflow).
+"""Pipeline de streaming (Apache Beam, roda no Dataflow).
 
 Lê os eventos de partida da assinatura `eventos-dataflow`, valida e limpa cada
 um e grava em stream.partidas. O que não passa na validação, e o que o próprio
