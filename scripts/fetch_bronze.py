@@ -1,21 +1,28 @@
 #!/usr/bin/env python3
-"""fetch_bronze.py - Coleta multi-liga ampliada para a camada Bronze do Foota Toota.
+"""fetch_bronze.py - Coleta multi-liga para a camada Bronze do Foota Toota.
 
 Fontes e Ligas Cobertas:
 1. Football-Data.co.uk:
-   - 10 ligas (Premier League, Championship, La Liga, Serie A, Bundesliga, Ligue 1, Eredivisie, Primeira Liga, Bélgica, Escócia)
-   - Temporadas: 2022-2023 até a atual (2026-2027) com dados de partidas, estatísticas e odds.
-   - Cada CSV é regravado com as colunas de bronze.ext_football_data_uk, escolhidas pelo nome do
-     cabeçalho: o BigQuery lê CSV pela posição e os arquivos mudam por liga e temporada (Referee só
-     nas ligas britânicas, HxG/AxG desde 2026-2027).
-   - Brasileirão Série A (new/BRA.csv): 2012 até a atualidade, com odds de fechamento.
+   - 10 ligas (Premier League, Championship, La Liga, Serie A, Bundesliga,
+     Ligue 1, Eredivisie, Primeira Liga, Bélgica, Escócia)
+   - Temporadas: 2022-2023 até a atual (2026-2027) com dados de partidas,
+     estatísticas e odds.
+   - Cada CSV é regravado com as colunas de bronze.ext_football_data_uk,
+     escolhidas pelo nome do cabeçalho: o BigQuery lê CSV pela posição e os
+     arquivos mudam por liga e temporada (Referee só nas ligas britânicas,
+     HxG/AxG desde 2026-2027).
+   - Brasileirão Série A (new/BRA.csv): 2012 até a atualidade, com odds de
+     fechamento.
 2. Brasileirão Dataset (adaoduque):
-   - Histórico completo de 2003 até a atualidade (>8.700 partidas com placar, técnicos, formação, arena).
+   - Histórico completo de 2003 até a atualidade (>8.700 partidas com placar,
+     técnicos, formação, arena).
 3. Football-Data.org API (Tier One Free):
-   - Premier League (PL), Brasileirão (BSA), La Liga (PD), Bundesliga (BL1), Serie A (SA), Ligue 1 (FL1), Champions League (CL), Championship (ELC).
+   - Premier League (PL), Brasileirão (BSA), La Liga (PD), Bundesliga (BL1),
+     Serie A (SA), Ligue 1 (FL1), Champions League (CL), Championship (ELC).
    - Rate limit controlado com intervalo de segurança (10 req/min).
 4. Feeds RSS de Notícias:
-   - Trivela (pt-BR), BBC Sport (en-GB), Sky Sports (en-GB) com controle de novidades via GUID.
+   - Trivela (pt-BR), BBC Sport (en-GB), Sky Sports (en-GB) com controle de
+     novidades via GUID.
 
 Armazena em data/bronze/ e envia para gs://{GCS_BUCKET}/bronze/.
 """
@@ -23,15 +30,15 @@ Armazena em data/bronze/ e envia para gs://{GCS_BUCKET}/bronze/.
 from __future__ import annotations
 
 import csv
-from datetime import datetime, timezone
-from email.utils import parsedate_to_datetime
 import io
 import json
 import os
-from pathlib import Path
 import subprocess
 import time
 import xml.etree.ElementTree as ET
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
+from pathlib import Path
 
 import httpx
 
@@ -42,9 +49,33 @@ CHECKPOINT_FILE = DATA_DIR / "_checkpoints" / "state.json"
 
 # Colunas de bronze.ext_football_data_uk, na ordem da tabela externa
 FOOTBALL_DATA_UK_COLUMNS = [
-    "Div", "Date", "Time", "HomeTeam", "AwayTeam", "FTHG", "FTAG", "FTR", "HTHG", "HTAG", "HTR",
-    "Referee", "HS", "AS", "HST", "AST", "HF", "AF", "HC", "AC", "HY", "AY", "HR", "AR",
-    "B365H", "B365D", "B365A",
+    "Div",
+    "Date",
+    "Time",
+    "HomeTeam",
+    "AwayTeam",
+    "FTHG",
+    "FTAG",
+    "FTR",
+    "HTHG",
+    "HTAG",
+    "HTR",
+    "Referee",
+    "HS",
+    "AS",
+    "HST",
+    "AST",
+    "HF",
+    "AF",
+    "HC",
+    "AC",
+    "HY",
+    "AY",
+    "HR",
+    "AR",
+    "B365H",
+    "B365D",
+    "B365A",
 ]
 
 
@@ -52,7 +83,7 @@ def load_env() -> dict[str, str]:
     env: dict[str, str] = {}
     env_path = ROOT_DIR / ".env"
     if env_path.exists():
-        with open(env_path, encoding="utf-8") as f:
+        with env_path.open(encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line or line.startswith("#") or "=" not in line:
@@ -67,7 +98,7 @@ def load_env() -> dict[str, str]:
 def load_checkpoint() -> dict:
     if CHECKPOINT_FILE.exists():
         try:
-            with open(CHECKPOINT_FILE, encoding="utf-8") as f:
+            with CHECKPOINT_FILE.open(encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             pass
@@ -76,21 +107,28 @@ def load_checkpoint() -> dict:
 
 def save_checkpoint(state: dict) -> None:
     CHECKPOINT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    state["last_run"] = datetime.now(timezone.utc).isoformat()
+    state["last_run"] = datetime.now(UTC).isoformat()
     if len(state.get("rss_seen_guids", [])) > 2000:
         state["rss_seen_guids"] = state["rss_seen_guids"][-2000:]
-    with open(CHECKPOINT_FILE, "w", encoding="utf-8") as f:
+    with CHECKPOINT_FILE.open("w", encoding="utf-8") as f:
         json.dump(state, f, indent=2, ensure_ascii=False)
 
 
 def normalize_football_data_uk(content: str) -> str:
-    """Regrava o CSV com FOOTBALL_DATA_UK_COLUMNS, lidas pelo nome; coluna ausente sai vazia."""
+    """Regrava o CSV com FOOTBALL_DATA_UK_COLUMNS, lidas pelo nome.
+
+    Coluna ausente no arquivo sai vazia.
+    """
     out = io.StringIO()
-    writer = csv.DictWriter(out, fieldnames=FOOTBALL_DATA_UK_COLUMNS, lineterminator="\n")
+    writer = csv.DictWriter(
+        out, fieldnames=FOOTBALL_DATA_UK_COLUMNS, lineterminator="\n"
+    )
     writer.writeheader()
     for row in csv.DictReader(io.StringIO(content)):
         if row.get("Div"):
-            writer.writerow({col: row.get(col) or "" for col in FOOTBALL_DATA_UK_COLUMNS})
+            writer.writerow(
+                {col: row.get(col) or "" for col in FOOTBALL_DATA_UK_COLUMNS}
+            )
     return out.getvalue()
 
 
@@ -121,7 +159,12 @@ def fetch_football_data_uk(client: httpx.Client, state: dict) -> int:
 
     for s_code, s_name in seasons:
         for l_code, l_name in leagues:
-            out_dir = DATA_DIR / "football_data_uk" / f"season={s_name}" / f"league={l_name}"
+            out_dir = (
+                DATA_DIR
+                / "football_data_uk"
+                / f"season={s_name}"
+                / f"league={l_name}"
+            )
             out_dir.mkdir(parents=True, exist_ok=True)
             out_file = out_dir / "matches.csv"
 
@@ -129,18 +172,29 @@ def fetch_football_data_uk(client: httpx.Client, state: dict) -> int:
             content = None
             for attempt in range(3):
                 try:
-                    resp = client.get(url, headers=headers, follow_redirects=True, timeout=60.0)
+                    resp = client.get(
+                        url,
+                        headers=headers,
+                        follow_redirects=True,
+                        timeout=60.0,
+                    )
                     if resp.status_code == 200 and len(resp.text.strip()) > 0:
                         content = resp.text.lstrip("\ufeff")
                         break
                     print(f"  ✗ {l_name} ({s_name}): status {resp.status_code}")
                 except Exception as e:
-                    print(f"  ✗ Falha ao baixar {l_name} ({s_name}), tentativa {attempt + 1}: {e}")
+                    print(
+                        f"  ✗ Falha ao baixar {l_name} ({s_name}), "
+                        f"tentativa {attempt + 1}: {e}"
+                    )
                 time.sleep(5)
             if content is None and out_file.exists():
-                # o arquivo de uma coleta anterior pode estar na ordem do site; normalizar um arquivo
-                # já normalizado não o altera
-                print(f"  ↺ {l_name} ({s_name}): mantendo o arquivo anterior, normalizado")
+                # o arquivo de uma coleta anterior pode estar na ordem do
+                # site; normalizar um arquivo já normalizado não o altera
+                print(
+                    f"  ↺ {l_name} ({s_name}): "
+                    "mantendo o arquivo anterior, normalizado"
+                )
                 content = out_file.read_text(encoding="utf-8").lstrip("\ufeff")
             if content is None:
                 continue
@@ -152,15 +206,21 @@ def fetch_football_data_uk(client: httpx.Client, state: dict) -> int:
 
     state.setdefault("sources", {})["football_data_uk"] = {
         "status": "success",
-        "last_updated": datetime.now(timezone.utc).isoformat(),
+        "last_updated": datetime.now(UTC).isoformat(),
         "total_records": total_saved,
     }
     return total_saved
 
 
 def fetch_football_data_uk_brazil(client: httpx.Client, state: dict) -> int:
-    """Baixa o Brasileirão Série A do Football-Data.co.uk (2012-presente, com odds)."""
-    print("\n=== [1b/4] Coletando Brasileirão do Football-Data.co.uk (2012-presente) ===")
+    """Baixa o Brasileirão Série A do Football-Data.co.uk.
+
+    Cobre de 2012 até hoje, com odds.
+    """
+    print(
+        "\n=== [1b/4] Coletando Brasileirão do Football-Data.co.uk "
+        "(2012-presente) ==="
+    )
     out_dir = DATA_DIR / "football_data_uk_bra"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_file = out_dir / "BRA.csv"
@@ -168,15 +228,20 @@ def fetch_football_data_uk_brazil(client: httpx.Client, state: dict) -> int:
     url = "https://www.football-data.co.uk/new/BRA.csv"
     headers = {"User-Agent": "Mozilla/5.0 (FootaToota MultiLeague/0.1)"}
     try:
-        resp = client.get(url, headers=headers, follow_redirects=True, timeout=30.0)
+        resp = client.get(
+            url, headers=headers, follow_redirects=True, timeout=30.0
+        )
         if resp.status_code == 200 and len(resp.text.strip()) > 0:
             content = resp.text.lstrip("﻿")
             out_file.write_text(content, encoding="utf-8")
             total_matches = len(content.strip().splitlines()) - 1
-            print(f"  ✓ Brasileirão (Football-Data.co.uk): {total_matches} partidas")
+            print(
+                f"  ✓ Brasileirão (Football-Data.co.uk): "
+                f"{total_matches} partidas"
+            )
             state.setdefault("sources", {})["football_data_uk_bra"] = {
                 "status": "success",
-                "last_updated": datetime.now(timezone.utc).isoformat(),
+                "last_updated": datetime.now(UTC).isoformat(),
                 "total_records": total_matches,
             }
             return total_matches
@@ -187,8 +252,11 @@ def fetch_football_data_uk_brazil(client: httpx.Client, state: dict) -> int:
 
 
 def fetch_brasileirao_dataset(client: httpx.Client, state: dict) -> int:
-    """Baixa o dataset histórico completo do Campeonato Brasileiro Série A (2003-presente)."""
-    print("\n=== [2/4] Coletando Histórico Completo do Brasileirão Série A (adaoduque) ===")
+    """Baixa o histórico completo do Brasileirão Série A (2003-presente)."""
+    print(
+        "\n=== [2/4] Coletando Histórico Completo do Brasileirão Série A "
+        "(adaoduque) ==="
+    )
     out_dir = DATA_DIR / "brasileirao_historico"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_file = out_dir / "campeonato_brasileiro_full.csv"
@@ -196,28 +264,38 @@ def fetch_brasileirao_dataset(client: httpx.Client, state: dict) -> int:
     url = "https://raw.githubusercontent.com/adaoduque/Brasileirao_Dataset/master/campeonato-brasileiro-full.csv"
     headers = {"User-Agent": "Mozilla/5.0 (FootaToota/0.1)"}
     try:
-        resp = client.get(url, headers=headers, follow_redirects=True, timeout=30.0)
+        resp = client.get(
+            url, headers=headers, follow_redirects=True, timeout=30.0
+        )
         if resp.status_code == 200:
             content = resp.text.strip()
             out_file.write_text(content, encoding="utf-8")
             lines = content.splitlines()
             total_matches = len(lines) - 1
-            print(f"  ✓ Brasileirão Série A (2003-2026): {total_matches} partidas salvas em {out_file.relative_to(ROOT_DIR)}")
+            print(
+                f"  ✓ Brasileirão Série A (2003-2026): {total_matches} "
+                f"partidas salvas em {out_file.relative_to(ROOT_DIR)}"
+            )
             state.setdefault("sources", {})["brasileirao_dataset"] = {
                 "status": "success",
-                "last_updated": datetime.now(timezone.utc).isoformat(),
+                "last_updated": datetime.now(UTC).isoformat(),
                 "total_records": total_matches,
             }
             return total_matches
         else:
-            print(f"  ✗ Erro ao baixar Brasileirão Dataset: status {resp.status_code}")
+            print(
+                f"  ✗ Erro ao baixar Brasileirão Dataset: "
+                f"status {resp.status_code}"
+            )
     except Exception as e:
         print(f"  ✗ Falha no download do Brasileirão: {e}")
     return 0
 
 
-def fetch_football_data_org(client: httpx.Client, api_key: str, state: dict) -> int:
-    """Coleta todas as ligas Tier One disponíveis no plano free da API football-data.org."""
+def fetch_football_data_org(
+    client: httpx.Client, api_key: str, state: dict
+) -> int:
+    """Coleta as ligas Tier One do plano free da API football-data.org."""
     print("\n=== [3/4] Coletando football-data.org API (Multi-Liga) ===")
     if not api_key:
         print("  ✗ FOOTBALLDATA_API_KEY ausente.")
@@ -249,7 +327,7 @@ def fetch_football_data_org(client: httpx.Client, api_key: str, state: dict) -> 
             if resp.status_code == 200:
                 payload = resp.json()
                 matches = payload.get("matches", [])
-                with open(out_file, "w", encoding="utf-8") as f:
+                with out_file.open("w", encoding="utf-8") as f:
                     for m in matches:
                         m["_competition_code"] = code
                         m["_competition_name"] = name
@@ -270,44 +348,74 @@ def fetch_football_data_org(client: httpx.Client, api_key: str, state: dict) -> 
 
     state.setdefault("sources", {})["football_data_org"] = {
         "status": "success",
-        "last_updated": datetime.now(timezone.utc).isoformat(),
+        "last_updated": datetime.now(UTC).isoformat(),
         "total_records": total_matches,
     }
     return total_matches
 
 
 def fetch_news_rss(client: httpx.Client, state: dict) -> int:
-    """Coleta notícias esportivas de múltiplos portais via Google News RSS e redações diretas."""
-    print("\n=== [4/4] Coletando Notícias em Tempo Real (Google News + Redações) ===")
+    """Coleta notícias de vários portais via Google News RSS e redações."""
+    print(
+        "\n=== [4/4] Coletando Notícias em Tempo Real "
+        "(Google News + Redações) ==="
+    )
     feeds = [
-        ("gnews_futebol_br", "https://news.google.com/rss/search?q=futebol+brasileiro&hl=pt-BR&gl=BR&ceid=BR:pt-419", "pt-BR"),
-        ("gnews_brasileirao", "https://news.google.com/rss/search?q=brasileir%C3%A3o+s%C3%A9rie+a&hl=pt-BR&gl=BR&ceid=BR:pt-419", "pt-BR"),
-        ("gnews_mercado_bola", "https://news.google.com/rss/search?q=mercado+da+bola+transferencias&hl=pt-BR&gl=BR&ceid=BR:pt-419", "pt-BR"),
-        ("gnews_premier_league", "https://news.google.com/rss/search?q=premier+league+football&hl=en-GB&gl=GB&ceid=GB:en", "en-GB"),
-        ("gnews_champions_league", "https://news.google.com/rss/search?q=champions+league+football&hl=en-GB&gl=GB&ceid=GB:en", "en-GB"),
+        (
+            "gnews_futebol_br",
+            "https://news.google.com/rss/search?q=futebol+brasileiro&hl=pt-BR&gl=BR&ceid=BR:pt-419",
+            "pt-BR",
+        ),
+        (
+            "gnews_brasileirao",
+            "https://news.google.com/rss/search?q=brasileir%C3%A3o+s%C3%A9rie+a&hl=pt-BR&gl=BR&ceid=BR:pt-419",
+            "pt-BR",
+        ),
+        (
+            "gnews_mercado_bola",
+            "https://news.google.com/rss/search?q=mercado+da+bola+transferencias&hl=pt-BR&gl=BR&ceid=BR:pt-419",
+            "pt-BR",
+        ),
+        (
+            "gnews_premier_league",
+            "https://news.google.com/rss/search?q=premier+league+football&hl=en-GB&gl=GB&ceid=GB:en",
+            "en-GB",
+        ),
+        (
+            "gnews_champions_league",
+            "https://news.google.com/rss/search?q=champions+league+football&hl=en-GB&gl=GB&ceid=GB:en",
+            "en-GB",
+        ),
         ("trivela", "https://trivela.com.br/feed/", "pt-BR"),
-        ("bbc_sport", "http://feeds.bbci.co.uk/sport/football/rss.xml", "en-GB"),
+        (
+            "bbc_sport",
+            "http://feeds.bbci.co.uk/sport/football/rss.xml",
+            "en-GB",
+        ),
         ("sky_sports", "https://www.skysports.com/rss/12040", "en-GB"),
     ]
     seen_guids = set(state.get("rss_seen_guids", []))
     new_articles = []
     headers = {"User-Agent": "Mozilla/5.0 (FootaToota RSS/0.1)"}
-    """Coleta notícias esportivas com extração completa do corpo (full article body)."""
+    # Coleta notícias com extração do corpo completo (full article body)
     try:
         from fetch_news import run_news_ingestion
+
         return run_news_ingestion(reset_seen=False)
     except Exception as e:
         print(f"  ✗ Erro ao coletar notícias: {e}")
         return 0
 
-    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today_str = datetime.now(UTC).strftime("%Y-%m-%d")
     out_dir = DATA_DIR / "news_rss" / f"dt={today_str}"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_file = out_dir / "articles.jsonl"
 
     for source_id, url, lang in feeds:
         try:
-            resp = client.get(url, headers=headers, follow_redirects=True, timeout=20.0)
+            resp = client.get(
+                url, headers=headers, follow_redirects=True, timeout=20.0
+            )
             if resp.status_code != 200:
                 print(f"  ✗ {source_id}: status {resp.status_code}")
                 continue
@@ -329,7 +437,11 @@ def fetch_news_rss(client: httpx.Client, state: dict) -> int:
 
                 # Extrai nome do portal de publicação (ex: ge, UOL, ESPN, BBC)
                 source_tag = item.find("source")
-                portal_name = source_tag.text.strip() if source_tag is not None and source_tag.text else source_id
+                portal_name = (
+                    source_tag.text.strip()
+                    if source_tag is not None and source_tag.text
+                    else source_id
+                )
 
                 if not guid or guid in seen_guids:
                     continue
@@ -338,7 +450,7 @@ def fetch_news_rss(client: httpx.Client, state: dict) -> int:
                 if pub_date_raw:
                     try:
                         dt = parsedate_to_datetime(pub_date_raw)
-                        pub_iso = dt.astimezone(timezone.utc).isoformat()
+                        pub_iso = dt.astimezone(UTC).isoformat()
                     except Exception:
                         pub_iso = pub_date_raw
 
@@ -352,29 +464,34 @@ def fetch_news_rss(client: httpx.Client, state: dict) -> int:
                     "source": portal_name,
                     "feed_topic": source_id,
                     "language": lang,
-                    "captured_at": datetime.now(timezone.utc).isoformat(),
+                    "captured_at": datetime.now(UTC).isoformat(),
                 }
                 new_articles.append(article)
                 seen_guids.add(guid)
                 count_new += 1
 
-            print(f"  ✓ {source_id}: {count_new} novos artigos adicionados (feed total: {len(items)})")
+            print(
+                f"  ✓ {source_id}: {count_new} novos artigos adicionados "
+                f"(feed total: {len(items)})"
+            )
         except Exception as e:
             print(f"  ✗ Erro em {source_id}: {e}")
 
-
     if new_articles:
-        with open(out_file, "a", encoding="utf-8") as f:
+        with out_file.open("a", encoding="utf-8") as f:
             for art in new_articles:
                 f.write(json.dumps(art, ensure_ascii=False) + "\n")
-        print(f"  ✓ {len(new_articles)} novos artigos anexados em {out_file.relative_to(ROOT_DIR)}")
+        print(
+            f"  ✓ {len(new_articles)} novos artigos anexados em "
+            f"{out_file.relative_to(ROOT_DIR)}"
+        )
     else:
-        print("  ℹ Sem novos artigos nos feeds.")
+        print("  • Sem novos artigos nos feeds.")
 
     state["rss_seen_guids"] = list(seen_guids)
     state.setdefault("sources", {})["news_rss"] = {
         "status": "success",
-        "last_updated": datetime.now(timezone.utc).isoformat(),
+        "last_updated": datetime.now(UTC).isoformat(),
         "new_articles_count": len(new_articles),
     }
     return len(new_articles)
@@ -404,7 +521,9 @@ def sync_to_gcs(env: dict[str, str]) -> bool:
         f"--project={project}",
     ]
     try:
-        subprocess.run(cmd, env=os_env, capture_output=True, text=True, check=True)
+        subprocess.run(
+            cmd, env=os_env, capture_output=True, text=True, check=True
+        )
         print("  ✓ Upload para o Cloud Storage concluído com sucesso!")
         return True
     except subprocess.CalledProcessError as e:

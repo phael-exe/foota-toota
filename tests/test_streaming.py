@@ -1,4 +1,4 @@
-"""Coletor e limpeza do streaming do Trabalho 2 (streaming/)."""
+"""Coletor e limpeza do pipeline de streaming (streaming/)."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ def _modulo(nome: str):
     spec = importlib.util.spec_from_file_location(
         nome, STREAMING / f"{nome}.py"
     )
+    assert spec is not None and spec.loader is not None
     modulo = importlib.util.module_from_spec(spec)
     sys.modules[nome] = modulo
     spec.loader.exec_module(modulo)

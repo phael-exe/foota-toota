@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""fetch_transfers_and_fantasy.py - Coleta dados de Transferências, Valores de Mercado e Fantasy (FPL).
+"""fetch_transfers_and_fantasy.py - Transferências, valores de mercado e FPL.
 
 Fontes integradas:
 1. Transfermarkt Datasets (Cloudflare R2):
@@ -8,7 +8,8 @@ Fontes integradas:
    - players (perfil de atletas: nacionalidade, posição, altura, pé, clube)
    - clubs (clubes: valor de elenco, estádio, capacidade, treinador)
 2. Fantasy Premier League (vaastav/Fantasy-Premier-League):
-   - Estatísticas detalhadas jogador por rodada (xG, xA, xGI, pontos, minutos, assistências)
+   - Estatísticas detalhadas jogador por rodada (xG, xA, xGI, pontos, minutos,
+     assistências)
    - Temporadas 2021-2022 até 2024-2025.
 3. Football-Data.org Standings:
    - Tabelas e classificações atualizadas das 10 principais competições.
@@ -20,9 +21,9 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import subprocess
 import time
+from pathlib import Path
 
 import httpx
 
@@ -35,7 +36,7 @@ def load_env() -> dict[str, str]:
     env: dict[str, str] = {}
     env_path = ROOT_DIR / ".env"
     if env_path.exists():
-        with open(env_path, encoding="utf-8") as f:
+        with env_path.open(encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line or line.startswith("#") or "=" not in line:
@@ -48,25 +49,41 @@ def load_env() -> dict[str, str]:
 
 
 def fetch_transfermarkt_files() -> None:
-    """Baixa os datasets do Transfermarkt e salva em data/bronze/transfermarkt/."""
-    print("\n=== [1/3] Coletando Transfermarkt Datasets (Mercado & Atletas) ===")
+    """Baixa os datasets do Transfermarkt em data/bronze/transfermarkt/."""
+    print(
+        "\n=== [1/3] Coletando Transfermarkt Datasets (Mercado & Atletas) ==="
+    )
     out_dir = DATA_DIR / "transfermarkt"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     files = [
-        ("transfers", "https://pub-e682421888d945d684bcae8890b0ec20.r2.dev/data/transfers.csv.gz"),
-        ("player_valuations", "https://pub-e682421888d945d684bcae8890b0ec20.r2.dev/data/player_valuations.csv.gz"),
-        ("players", "https://pub-e682421888d945d684bcae8890b0ec20.r2.dev/data/players.csv.gz"),
-        ("clubs", "https://pub-e682421888d945d684bcae8890b0ec20.r2.dev/data/clubs.csv.gz"),
+        (
+            "transfers",
+            "https://pub-e682421888d945d684bcae8890b0ec20.r2.dev/data/transfers.csv.gz",
+        ),
+        (
+            "player_valuations",
+            "https://pub-e682421888d945d684bcae8890b0ec20.r2.dev/data/player_valuations.csv.gz",
+        ),
+        (
+            "players",
+            "https://pub-e682421888d945d684bcae8890b0ec20.r2.dev/data/players.csv.gz",
+        ),
+        (
+            "clubs",
+            "https://pub-e682421888d945d684bcae8890b0ec20.r2.dev/data/clubs.csv.gz",
+        ),
     ]
 
     for name, url in files:
         out_file = out_dir / f"{name}.csv.gz"
         print(f"  -> Baixando {name}.csv.gz...")
         try:
-            with httpx.stream("GET", url, timeout=120.0, follow_redirects=True) as resp:
+            with httpx.stream(
+                "GET", url, timeout=120.0, follow_redirects=True
+            ) as resp:
                 if resp.status_code == 200:
-                    with open(out_file, "wb") as f:
+                    with out_file.open("wb") as f:
                         for chunk in resp.iter_bytes(chunk_size=65536):
                             f.write(chunk)
                     mb = out_file.stat().st_size / (1024 * 1024)
@@ -79,7 +96,10 @@ def fetch_transfermarkt_files() -> None:
 
 def fetch_fantasy_premier_league() -> None:
     """Baixa dados de gameweeks detalhados do Fantasy Premier League."""
-    print("\n=== [2/3] Coletando Fantasy Premier League (Estatísticas & xG/xA) ===")
+    print(
+        "\n=== [2/3] Coletando Fantasy Premier League "
+        "(Estatísticas & xG/xA) ==="
+    )
     seasons = ["2024-25", "2023-24", "2022-23", "2021-22"]
     headers = {"User-Agent": "Mozilla/5.0"}
 
@@ -96,7 +116,10 @@ def fetch_fantasy_premier_league() -> None:
                     content = resp.text.strip()
                     lines = content.splitlines()
                     out_file.write_text(content, encoding="utf-8")
-                    print(f"  ✓ FPL {s}: {len(lines) - 1} registros jogador-rodada salvos")
+                    print(
+                        f"  ✓ FPL {s}: {len(lines) - 1} registros "
+                        "jogador-rodada salvos"
+                    )
                 else:
                     print(f"  ✗ FPL {s}: status {resp.status_code}")
             except Exception as e:
@@ -105,7 +128,10 @@ def fetch_fantasy_premier_league() -> None:
 
 def fetch_football_data_org_standings(env: dict[str, str]) -> None:
     """Coleta tabelas de classificação oficiais da API football-data.org."""
-    print("\n=== [3/3] Coletando Classificação Oficial (Standings) das 10 Ligas ===")
+    print(
+        "\n=== [3/3] Coletando Classificação Oficial (Standings) "
+        "das 10 Ligas ==="
+    )
     api_key = env.get("FOOTBALLDATA_API_KEY", "")
     if not api_key:
         print("  ✗ FOOTBALLDATA_API_KEY ausente.")
@@ -127,7 +153,9 @@ def fetch_football_data_org_standings(env: dict[str, str]) -> None:
 
     with httpx.Client(headers=headers, timeout=30.0) as client:
         for i, (code, name) in enumerate(competitions):
-            out_dir = DATA_DIR / "football_data_org_standings" / f"competition={code}"
+            out_dir = (
+                DATA_DIR / "football_data_org_standings" / f"competition={code}"
+            )
             out_dir.mkdir(parents=True, exist_ok=True)
             out_file = out_dir / "standings.jsonl"
 
@@ -135,13 +163,16 @@ def fetch_football_data_org_standings(env: dict[str, str]) -> None:
             try:
                 resp = client.get(url)
                 if resp.status_code == 429:
-                    print(f"  ⚠ Rate limit em {code}. Aguardando 61s para tentar de novo...")
+                    print(
+                        f"  ⚠ Rate limit em {code}. "
+                        "Aguardando 61s para tentar de novo..."
+                    )
                     time.sleep(61)
                     resp = client.get(url)
                 if resp.status_code == 200:
                     payload = resp.json()
                     standings = payload.get("standings", [])
-                    with open(out_file, "w", encoding="utf-8") as f:
+                    with out_file.open("w", encoding="utf-8") as f:
                         for st in standings:
                             st["_competition_code"] = code
                             st["_competition_name"] = name
@@ -181,7 +212,9 @@ def sync_to_gcs(env: dict[str, str]) -> bool:
         f"--project={project}",
     ]
     try:
-        subprocess.run(cmd, env=os_env, capture_output=True, text=True, check=True)
+        subprocess.run(
+            cmd, env=os_env, capture_output=True, text=True, check=True
+        )
         print("  ✓ Upload para gs://foota-toota-505511 concluído com sucesso!")
         return True
     except subprocess.CalledProcessError as e:
@@ -195,7 +228,9 @@ def main() -> None:
     fetch_fantasy_premier_league()
     fetch_football_data_org_standings(env)
     sync_to_gcs(env)
-    print("\n✓ Coleta de transferências, mercado e fantasy concluída com sucesso!")
+    print(
+        "\n✓ Coleta de transferências, mercado e fantasy concluída com sucesso!"
+    )
 
 
 if __name__ == "__main__":
