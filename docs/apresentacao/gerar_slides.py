@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 
 from lxml import etree
+from PIL import Image
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.dml import MSO_LINE_DASH_STYLE
@@ -29,6 +30,7 @@ API = "https://modelo-api-3gvoh2dyuq-uc.a.run.app"
 COLETA = "pdm-bia-505511"
 MODELO = "pdm-andre-2026"
 CONSOLE = "https://console.cloud.google.com/"
+PASTA_PRINTS = Path(__file__).with_name("prints")
 
 FONTE = "Inter"
 MONO = "Roboto Mono"
@@ -162,8 +164,34 @@ def links(s, pares, x, y, w=6.0):
     return caixa
 
 
+def imagem(s, arquivo, nome, url, x, y, w, h):
+    """Print encaixado na área (x, y, w, h), sem distorcer, centralizado e clicável."""
+    with Image.open(arquivo) as im:
+        proporcao = im.width / im.height
+    if proporcao >= w / h:
+        largura, altura = w, w / proporcao
+    else:
+        largura, altura = h * proporcao, h
+    foto = s.shapes.add_picture(
+        str(arquivo),
+        Inches(x + (w - largura) / 2),
+        Inches(y + (h - altura) / 2),
+        Inches(largura),
+        Inches(altura),
+    )
+    foto.name = nome
+    foto.line.color.rgb = BORDA
+    foto.line.width = Pt(0.75)
+    foto.click_action.hyperlink.address = url
+    return foto
+
+
 def print_gcp(s, ident, titulo, projeto, url, x, y, w, h):
-    """Caixa tracejada no lugar do print do console do GCP."""
+    """Print do console do GCP (prints/<ident>.png) ou, se ainda não existir,
+    uma caixa tracejada com o que mostrar e o link do console."""
+    arquivo = PASTA_PRINTS / f"{ident}.png"
+    if arquivo.exists():
+        return imagem(s, arquivo, f"PRINT: {ident}", url, x, y, w, h)
     caixa = s.shapes.add_shape(
         MSO_SHAPE.RECTANGLE, Inches(x), Inches(y), Inches(w), Inches(h)
     )
@@ -198,7 +226,18 @@ def print_gcp(s, ident, titulo, projeto, url, x, y, w, h):
 
 
 def print_repo(s, ident, titulo, arquivo, x, y, w, h):
-    """Caixa no lugar de um print que já está no repositório (docs/apresentacao/prints)."""
+    """Print que já está no repositório (docs/apresentacao/prints)."""
+    if (PASTA_PRINTS / arquivo).exists():
+        return imagem(
+            s,
+            PASTA_PRINTS / arquivo,
+            f"PRINT_REPO: {arquivo}",
+            PRINTS + arquivo,
+            x,
+            y,
+            w,
+            h,
+        )
     caixa = print_gcp(
         s, ident, titulo, "evidência local", PRINTS + arquivo, x, y, w, h
     )
@@ -335,12 +374,13 @@ texto(
 )
 texto(
     s,
-    "Raphael  ·  André  ·  Wagner",
+    "Raphael Alves de Lima Soares  ·  André Vinicius Moura Koraleski\n"
+    "Victor Gabriel Ribeiro Jacome  ·  Wagner Victor Alves de Menezes",
     0.8,
-    5.3,
-    11,
-    0.4,
-    16,
+    5.05,
+    11.5,
+    0.7,
+    15,
     cor=BRANCO,
     negrito=True,
 )
@@ -411,7 +451,59 @@ for i, (t, d, cam) in enumerate(cartoes):
         s, cam, x + 0.3, y + 1.85, 5.4, 0.35, 12, fonte=MONO, link=CODIGO + cam
     )
 
-# ---------------------------------------------------------------- 3. arquitetura
+# ---------------------------------------------------------------- 3. evolução
+s = novo("Do Trabalho 1 ao Trabalho 2", "evolução da arquitetura")
+tabela(
+    s,
+    [
+        ["", "Trabalho 1: batch", "Trabalho 2: + tempo real e deploy"],
+        [
+            "Ingestão",
+            "scripts baixam as fontes para o GCS (bronze)",
+            "+ coletor a cada 5 min publica eventos JSON no Pub/Sub",
+        ],
+        [
+            "Processamento",
+            "SQL em camadas: bronze → silver → gold, com `ASSERT` bloqueantes",
+            "+ Dataflow valida e limpa cada evento; inválidos vão para a quarentena",
+        ],
+        [
+            "BigQuery",
+            "histórico de todas as fontes em bronze, silver e gold",
+            "+ dataset `stream` e views da gold que juntam batch e stream",
+        ],
+        [
+            "Modelo",
+            "referência em BigQuery ML: regressão logística e boosted trees",
+            "um modelo por liga no Vertex AI Model Registry, alias `campeao`",
+        ],
+        [
+            "Serviço",
+            "previsões gravadas em tabela",
+            "API REST em Docker no Cloud Run: `POST /predict` e push do Pub/Sub",
+        ],
+    ],
+    0.55,
+    1.5,
+    12.25,
+    [1.95, 4.6, 5.7],
+    13,
+    0.68,
+)
+topicos(
+    s,
+    [
+        "O batch continua igual: a gold dele é a base do treino e o histórico que o stream "
+        "completa."
+    ],
+    0.55,
+    5.85,
+    12.2,
+    0.6,
+    15,
+)
+
+# ---------------------------------------------------------------- 4. arquitetura
 s = novo("Arquitetura", "como os dados andam")
 COL = [0.55 + i * 2.1 for i in range(6)]
 BW, BH = 1.85, 0.62
@@ -1061,6 +1153,7 @@ links(
     s,
     [
         ("api.py", "modelo/api.py#L856-L955"),
+        ("Dockerfile", "modelo/Dockerfile"),
         ("deploy_api.sh", "modelo/deploy_api.sh"),
         ("Swagger", f"{API}/docs"),
     ],
