@@ -1,9 +1,11 @@
 # ruff: noqa: E501, RUF001
 """Gera o deck do Trabalho 2 (Ingestão em Tempo Real e Deploy de Modelo) em .pptx.
 
-O arquivo sobe para o Google Drive e vira Google Slides. Cada print que falta
-é uma caixa tracejada com nome `PRINT: <id>`, o projeto e a URL exata do
-console do GCP, para trocar pela imagem depois.
+Usa o template de slides do INF/UFG: os fundos de template/ saem do PDF do
+template sem o texto, e o conteúdo fica à esquerda da faixa azul. O arquivo
+sobe para o Google Drive e vira Google Slides. Cada print vem de
+prints/<id>.png; se ainda não existir, vira uma caixa tracejada com o projeto
+e a URL exata do console do GCP.
 
     uv run --no-project --with python-pptx python docs/apresentacao/gerar_slides.py
 """
@@ -14,6 +16,7 @@ import sys
 from pathlib import Path
 
 from lxml import etree
+from PIL import Image
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.dml import MSO_LINE_DASH_STYLE
@@ -29,14 +32,17 @@ API = "https://modelo-api-3gvoh2dyuq-uc.a.run.app"
 COLETA = "pdm-bia-505511"
 MODELO = "pdm-andre-2026"
 CONSOLE = "https://console.cloud.google.com/"
+PASTA_PRINTS = Path(__file__).with_name("prints")
+PASTA_TEMPLATE = Path(__file__).with_name("template")
 
-FONTE = "Inter"
+FONTE = "Roboto"
 MONO = "Roboto Mono"
 TINTA = RGBColor(0x1F, 0x23, 0x28)
 CINZA = RGBColor(0x57, 0x60, 0x6A)
-VERDE = RGBColor(0x14, 0x6C, 0x43)
-VERDE_CLARO = RGBColor(0xE8, 0xF5, 0xEC)
-AZUL = RGBColor(0x09, 0x69, 0xDA)
+# azul do template do INF e um tom claro dele para cartões e linhas de tabela
+VERDE = RGBColor(0x00, 0x5C, 0xA1)
+VERDE_CLARO = RGBColor(0xE6, 0xEF, 0xF8)
+AZUL = RGBColor(0x0B, 0x57, 0xD0)
 AREIA = RGBColor(0xF6, 0xF8, 0xFA)
 BORDA = RGBColor(0x9C, 0xA3, 0xAF)
 BRANCO = RGBColor(0xFF, 0xFF, 0xFF)
@@ -47,24 +53,92 @@ prs.slide_height = Inches(7.5)
 BRANCO_LAYOUT = prs.slide_layouts[6]
 
 
+def fundo(s, arquivo: Path) -> None:
+    """Imagem do template como fundo do slide (não dá para mover sem querer)."""
+    _, rid = s.part.get_or_add_image_part(str(arquivo))
+    a = "http://schemas.openxmlformats.org/drawingml/2006/main"
+    p = "http://schemas.openxmlformats.org/presentationml/2006/main"
+    r = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    bg = etree.fromstring(
+        f'<p:bg xmlns:p="{p}" xmlns:a="{a}" xmlns:r="{r}"><p:bgPr>'
+        f'<a:blipFill dpi="0" rotWithShape="1"><a:blip r:embed="{rid}"/>'
+        "<a:srcRect/><a:stretch><a:fillRect/></a:stretch></a:blipFill>"
+        "<a:effectLst/></p:bgPr></p:bg>"
+    )
+    s._element.cSld.insert(0, bg)
+
+
+# Conteúdo desenhado em até 12,8" é encolhido na horizontal para caber à
+# esquerda da faixa azul do template (que começa em ~11,6" na altura do título).
+MARGEM = 0.55
+LIMITE = 11.35
+ESCALA = (LIMITE - MARGEM) / (12.8 - MARGEM)
+FIXO = "fixo: "
+
+
 def novo(titulo: str, kicker: str = "") -> object:
     s = prs.slides.add_slide(BRANCO_LAYOUT)
-    faixa = s.shapes.add_shape(
-        MSO_SHAPE.RECTANGLE, 0, 0, prs.slide_width, Inches(0.12)
-    )
-    faixa.fill.solid()
-    faixa.fill.fore_color.rgb = VERDE
-    faixa.line.fill.background()
+    fundo(s, PASTA_TEMPLATE / "conteudo.png")
     if kicker:
         texto(
-            s, kicker.upper(), 0.55, 0.32, 12, 0.3, 11, cor=VERDE, negrito=True
+            s, kicker.upper(), 0.55, 0.38, 10, 0.3, 11, cor=VERDE, negrito=True
         )
-    texto(s, titulo, 0.55, 0.55, 12.2, 0.7, 26, negrito=True)
-    rodape = (
-        f"Foota Toota · Trabalho 2 · PDM 2026/2   {len(prs.slides._sldIdLst)}"
+    texto(s, titulo, 0.55, 0.62, 12.2, 0.7, 26, negrito=True)
+    rodape = texto(
+        s,
+        "Foota Toota · Trabalho 2 · PDM 2026/2",
+        0.55,
+        7.08,
+        5,
+        0.3,
+        9,
+        cor=CINZA,
     )
-    texto(s, rodape, 9.0, 7.08, 3.8, 0.3, 9, cor=CINZA, alinhar=PP_ALIGN.RIGHT)
+    rodape.name = FIXO + "rodapé"
+    numero = texto(
+        s,
+        str(len(prs.slides._sldIdLst)),
+        12.45,
+        7.02,
+        0.6,
+        0.3,
+        10,
+        cor=VERDE,
+        negrito=True,
+        alinhar=PP_ALIGN.RIGHT,
+    )
+    numero.name = FIXO + "número"
     return s
+
+
+def encaixar(s) -> None:
+    """Encolhe o slide na horizontal (ESCALA) a partir da margem esquerda.
+
+    Posições e larguras de tudo escalam juntas, inclusive setas e colunas de
+    tabela, então o desenho continua ligado; imagens escalam também na altura,
+    para não distorcer, e ficam centradas onde estavam.
+    """
+    for sh in s.shapes:
+        if sh.name.startswith(FIXO):
+            continue
+        x, w = sh.left / 914400, sh.width / 914400
+        sh.left = Inches(MARGEM + (x - MARGEM) * ESCALA)
+        sh.width = Inches(w * ESCALA)
+        if sh.shape_type == 13:  # imagem: encaixa de novo na área encolhida
+            ax, ay, aw, ah = AREAS[s.slide_id, sh.shape_id]
+            ax, aw = MARGEM + (ax - MARGEM) * ESCALA, aw * ESCALA
+            proporcao = w / (sh.height / 914400)
+            if proporcao >= aw / ah:
+                largura, altura = aw, aw / proporcao
+            else:
+                largura, altura = ah * proporcao, ah
+            sh.left = Inches(ax + (aw - largura) / 2)
+            sh.top = Inches(ay + (ah - altura) / 2)
+            sh.width = Inches(largura)
+            sh.height = Inches(altura)
+        if sh.has_table:
+            for col in sh.table.columns:
+                col.width = Inches(col.width / 914400 * ESCALA)
 
 
 def texto(
@@ -127,7 +201,7 @@ def topicos(s, itens, x, y, w, h, tam=15):
                     continue
                 r = p.add_run()
                 r.text = parte
-                r.font.size = Pt(tam - nivel * 2)
+                r.font.size = Pt(tam - nivel * 2 - (1 if k % 2 else 0))
                 r.font.name = MONO if k % 2 else FONTE
                 r.font.color.rgb = TINTA
     return caixa
@@ -153,7 +227,7 @@ def links(s, pares, x, y, w=6.0):
             r.font.color.rgb = CINZA
         r = p.add_run()
         r.text = rotulo
-        r.font.size = Pt(12)
+        r.font.size = Pt(10)
         r.font.name = MONO
         r.font.color.rgb = AZUL
         r.hyperlink.address = (
@@ -162,8 +236,38 @@ def links(s, pares, x, y, w=6.0):
     return caixa
 
 
+AREAS: dict[tuple[int, int], tuple[float, float, float, float]] = {}
+
+
+def imagem(s, arquivo, nome, url, x, y, w, h):
+    """Print encaixado na área (x, y, w, h), sem distorcer, centralizado e clicável."""
+    with Image.open(arquivo) as im:
+        proporcao = im.width / im.height
+    if proporcao >= w / h:
+        largura, altura = w, w / proporcao
+    else:
+        largura, altura = h * proporcao, h
+    foto = s.shapes.add_picture(
+        str(arquivo),
+        Inches(x + (w - largura) / 2),
+        Inches(y + (h - altura) / 2),
+        Inches(largura),
+        Inches(altura),
+    )
+    foto.name = nome
+    AREAS[s.slide_id, foto.shape_id] = (x, y, w, h)
+    foto.line.color.rgb = BORDA
+    foto.line.width = Pt(0.75)
+    foto.click_action.hyperlink.address = url
+    return foto
+
+
 def print_gcp(s, ident, titulo, projeto, url, x, y, w, h):
-    """Caixa tracejada no lugar do print do console do GCP."""
+    """Print do console do GCP (prints/<ident>.png) ou, se ainda não existir,
+    uma caixa tracejada com o que mostrar e o link do console."""
+    arquivo = PASTA_PRINTS / f"{ident}.png"
+    if arquivo.exists():
+        return imagem(s, arquivo, f"PRINT: {ident}", url, x, y, w, h)
     caixa = s.shapes.add_shape(
         MSO_SHAPE.RECTANGLE, Inches(x), Inches(y), Inches(w), Inches(h)
     )
@@ -198,7 +302,18 @@ def print_gcp(s, ident, titulo, projeto, url, x, y, w, h):
 
 
 def print_repo(s, ident, titulo, arquivo, x, y, w, h):
-    """Caixa no lugar de um print que já está no repositório (docs/apresentacao/prints)."""
+    """Print que já está no repositório (docs/apresentacao/prints)."""
+    if (PASTA_PRINTS / arquivo).exists():
+        return imagem(
+            s,
+            PASTA_PRINTS / arquivo,
+            f"PRINT_REPO: {arquivo}",
+            PRINTS + arquivo,
+            x,
+            y,
+            w,
+            h,
+        )
     caixa = print_gcp(
         s, ident, titulo, "evidência local", PRINTS + arquivo, x, y, w, h
     )
@@ -234,7 +349,7 @@ def tabela(s, linhas, x, y, w, larguras, tam=12, alt=0.36):
                     continue
                 r = p.add_run()
                 r.text = parte
-                r.font.size = Pt(tam)
+                r.font.size = Pt(tam - (1 if k % 2 else 0))
                 r.font.name = MONO if k % 2 else FONTE
                 r.font.bold = i == 0
                 r.font.color.rgb = BRANCO if i == 0 else TINTA
@@ -294,74 +409,73 @@ def seta(s, a, b, de=3, para=1, tipo=MSO_CONNECTOR.ELBOW):
 
 # ---------------------------------------------------------------- 1. capa
 s = prs.slides.add_slide(BRANCO_LAYOUT)
-fundo = s.shapes.add_shape(
-    MSO_SHAPE.RECTANGLE, 0, 0, prs.slide_width, prs.slide_height
+fundo(s, PASTA_TEMPLATE / "capa.png")
+inst = texto(
+    s, "INSTITUTO DE INFORMÁTICA", 0.44, 0.42, 5, 0.25, 11, negrito=True
 )
-fundo.fill.solid()
-fundo.fill.fore_color.rgb = RGBColor(0x0B, 0x3D, 0x2E)
-fundo.line.fill.background()
+inst.text_frame.add_paragraph()
+r = inst.text_frame.paragraphs[1].add_run()
+r.text = "Universidade Federal de Goiás"
+r.font.size = Pt(11)
+r.font.name = FONTE
+r.font.color.rgb = TINTA
+CENTRO = PP_ALIGN.CENTER
 texto(
     s,
-    "PROCESSAMENTO DE DADOS MASSIVOS · 2026/2 (BIA) · INF/UFG",
-    0.8,
-    1.5,
-    11,
-    0.4,
+    "PROCESSAMENTO DE DADOS MASSIVOS · 2026/2 (BIA)",
+    1.1,
+    1.3,
+    10.1,
+    0.35,
     13,
-    cor=RGBColor(0x9F, 0xE0, 0xB5),
+    cor=VERDE,
     negrito=True,
+    alinhar=CENTRO,
 )
-texto(s, "Foota Toota", 0.8, 2.0, 11, 1.1, 54, cor=BRANCO, negrito=True)
+texto(s, "Foota Toota", 1.1, 1.7, 10.1, 0.85, 44, negrito=True, alinhar=CENTRO)
 texto(
     s,
     "Trabalho 2: Ingestão em Tempo Real e Deploy de Modelo",
-    0.8,
-    3.15,
-    11.5,
-    0.7,
-    28,
-    cor=BRANCO,
+    1.1,
+    2.6,
+    10.1,
+    0.5,
+    24,
+    alinhar=CENTRO,
 )
 texto(
     s,
     "Brasileirão ao vivo no Pub/Sub e Dataflow, batch e stream juntos no BigQuery,\n"
     "e um modelo por liga no Vertex AI servido por uma API no Cloud Run.",
-    0.8,
-    4.0,
-    11.5,
-    0.9,
-    16,
-    cor=RGBColor(0xD0, 0xE8, 0xDA),
+    1.1,
+    3.2,
+    10.1,
+    0.65,
+    14,
+    cor=CINZA,
+    alinhar=CENTRO,
 )
 texto(
     s,
-    "Raphael  ·  André  ·  Wagner",
-    0.8,
-    5.3,
-    11,
-    0.4,
-    16,
-    cor=BRANCO,
+    "Raphael Alves de Lima Soares  ·  André Vinicius Moura Koraleski\n"
+    "Victor Gabriel Ribeiro Jacome  ·  Wagner Victor Alves de Menezes",
+    1.1,
+    4.0,
+    10.1,
+    0.65,
+    15,
     negrito=True,
+    alinhar=CENTRO,
 )
-base = s.shapes.add_shape(
-    MSO_SHAPE.ROUNDED_RECTANGLE,
-    Inches(0.8),
-    Inches(5.85),
-    Inches(7.6),
-    Inches(0.85),
-)
-base.adjustments[0] = 0.15
-base.fill.solid()
-base.fill.fore_color.rgb = BRANCO
-base.line.fill.background()
 for i, (rotulo, url) in enumerate(
     [
         ("Repositório: github.com/phael-exe/foota-toota", REPO),
         (f"API em produção: {API}", f"{API}/docs"),
     ]
 ):
-    texto(s, rotulo, 1.0, 5.92 + i * 0.35, 7.3, 0.35, 13, link=url)
+    texto(
+        s, rotulo, 1.1, 4.78 + i * 0.3, 10.1, 0.3, 12, link=url, alinhar=CENTRO
+    )
 
 # ---------------------------------------------------------------- 2. entregas
 s = novo("O que entregamos", "visão geral")
@@ -408,10 +522,62 @@ for i, (t, d, cam) in enumerate(cartoes):
     texto(s, t, x + 0.3, y + 0.25, 5.4, 0.45, 19, cor=VERDE, negrito=True)
     texto(s, d, x + 0.3, y + 0.8, 5.4, 1.1, 15)
     texto(
-        s, cam, x + 0.3, y + 1.85, 5.4, 0.35, 12, fonte=MONO, link=CODIGO + cam
+        s, cam, x + 0.3, y + 1.85, 5.6, 0.35, 10, fonte=MONO, link=CODIGO + cam
     )
 
-# ---------------------------------------------------------------- 3. arquitetura
+# ---------------------------------------------------------------- 3. evolução
+s = novo("Do Trabalho 1 ao Trabalho 2", "evolução da arquitetura")
+tabela(
+    s,
+    [
+        ["", "Trabalho 1: batch", "Trabalho 2: + tempo real e deploy"],
+        [
+            "Ingestão",
+            "scripts baixam as fontes para o GCS (bronze)",
+            "+ coletor a cada 5 min publica eventos JSON no Pub/Sub",
+        ],
+        [
+            "Processamento",
+            "SQL em camadas: bronze → silver → gold, com `ASSERT` bloqueantes",
+            "+ Dataflow valida e limpa cada evento; inválidos vão para a quarentena",
+        ],
+        [
+            "BigQuery",
+            "histórico de todas as fontes em bronze, silver e gold",
+            "+ dataset `stream` e views da gold que juntam batch e stream",
+        ],
+        [
+            "Modelo",
+            "referência em BigQuery ML: regressão logística e boosted trees",
+            "um modelo por liga no Vertex AI Model Registry, alias `campeao`",
+        ],
+        [
+            "Serviço",
+            "previsões gravadas em tabela",
+            "API REST em Docker no Cloud Run: `POST /predict` e push do Pub/Sub",
+        ],
+    ],
+    0.55,
+    1.5,
+    12.25,
+    [1.95, 4.6, 5.7],
+    13,
+    0.68,
+)
+topicos(
+    s,
+    [
+        "O batch continua igual: a gold dele é a base do treino e o histórico que o stream "
+        "completa."
+    ],
+    0.55,
+    5.85,
+    12.2,
+    0.6,
+    15,
+)
+
+# ---------------------------------------------------------------- 4. arquitetura
 s = novo("Arquitetura", "como os dados andam")
 COL = [0.55 + i * 2.1 for i in range(6)]
 BW, BH = 1.85, 0.62
@@ -740,7 +906,7 @@ bloco(
     4.6,
     5.4,
     1.85,
-    10,
+    8.5,
 )
 links(
     s,
@@ -787,7 +953,7 @@ tabela(
     0.55,
     1.5,
     6.1,
-    [1.75, 1.5, 1.15, 1.7],
+    [2.05, 1.4, 1.05, 1.6],
     11,
     0.5,
 )
@@ -851,7 +1017,7 @@ tabela(
     0.55,
     1.5,
     6.1,
-    [2.3, 3.8],
+    [2.6, 3.5],
     11,
     0.62,
 )
@@ -883,7 +1049,7 @@ links(
     ],
     0.55,
     6.55,
-    6.3,
+    6.9,
 )
 print_gcp(
     s,
@@ -930,8 +1096,8 @@ topicos(
     0.55,
     1.45,
     6.1,
-    3.3,
-    14,
+    4.8,
+    15,
 )
 tabela(
     s,
@@ -945,12 +1111,12 @@ tabela(
         ],
         ["Log loss: modelo / frequências", "1,012 / 1,044", "1,060 / 1,093"],
     ],
-    0.55,
-    4.85,
-    6.1,
-    [2.9, 1.6, 1.6],
+    6.9,
+    4.25,
+    5.9,
+    [2.7, 1.6, 1.6],
     11,
-    0.38,
+    0.42,
 )
 links(s, [("treinar.py", "modelo/treinar.py#L148-L222")], 0.55, 6.55)
 print_gcp(
@@ -963,7 +1129,7 @@ print_gcp(
     6.9,
     1.45,
     5.9,
-    5.0,
+    2.55,
 )
 
 # ---------------------------------------------------------------- 10. registry
@@ -1061,6 +1227,7 @@ links(
     s,
     [
         ("api.py", "modelo/api.py#L856-L955"),
+        ("Dockerfile", "modelo/Dockerfile"),
         ("deploy_api.sh", "modelo/deploy_api.sh"),
         ("Swagger", f"{API}/docs"),
     ],
@@ -1115,7 +1282,7 @@ bloco(
     1.45,
     6.3,
     5.0,
-    11,
+    8.5,
 )
 print_repo(
     s,
@@ -1159,7 +1326,7 @@ passos = [
     ),
 ]
 for i, (n, t, d) in enumerate(passos):
-    y = 1.5 + i * 1.22
+    y = 1.45 + i * 1.12
     bola = s.shapes.add_shape(
         MSO_SHAPE.OVAL, Inches(0.55), Inches(y), Inches(0.55), Inches(0.55)
     )
@@ -1179,10 +1346,10 @@ texto(
     "O Pub/Sub entrega pelo menos uma vez: o prediction_id é o mesmo para o mesmo evento "
     "e a mesma versão do modelo, então reentrega não duplica.",
     0.55,
-    6.05,
-    6.1,
-    0.5,
-    12,
+    5.9,
+    6.3,
+    0.6,
+    11,
     cor=CINZA,
 )
 links(
@@ -1329,7 +1496,7 @@ bloco(
     1.45,
     8.0,
     4.6,
-    12,
+    10,
 )
 caixa_links = topicos(
     s,
@@ -1358,6 +1525,37 @@ for p, url in zip(
     r = p.runs[-1]
     r.font.color.rgb = AZUL
     r.hyperlink.address = url
+
+# ---------------------------------------------------------------- 18. encerramento
+s = prs.slides.add_slide(BRANCO_LAYOUT)
+fundo(s, PASTA_TEMPLATE / "conteudo.png")
+texto(
+    s,
+    "Muito obrigado!\nDúvidas?",
+    1.0,
+    2.6,
+    10.3,
+    1.6,
+    44,
+    cor=RGBColor(0x3C, 0x3C, 0x3C),
+    negrito=True,
+    alinhar=PP_ALIGN.CENTER,
+)
+texto(
+    s,
+    "github.com/phael-exe/foota-toota",
+    1.0,
+    4.45,
+    10.3,
+    0.4,
+    16,
+    link=REPO,
+    alinhar=PP_ALIGN.CENTER,
+)
+
+slides = list(prs.slides)
+for sl in slides[1:-1]:
+    encaixar(sl)
 
 saida = (
     Path(sys.argv[1])
