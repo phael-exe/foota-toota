@@ -1,4 +1,4 @@
--- G5 in detail. Reference for this batch: home 44.3 - away 31.8 - draw 23.9.
+-- G5 in detail, all leagues together (EPL alone: home 44.3 - away 31.8 - draw 23.9).
 SELECT
     label_outcome,
     COUNT(*) AS matches,

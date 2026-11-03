@@ -1,0 +1,337 @@
+﻿entidade,campo,tipo_bigquery_sugerido,descricao,unidade,schema
+proveniencia,source_id,STRING,Identificador da fonte no catálogo; não é segredo,ID,proposto; nao nativo
+proveniencia,source_record_id,STRING,Identificador original; usar chave composta documentada quando não houver ID,ID,proposto; nao nativo
+proveniencia,source_url,STRING,URL da evidência ou endpoint sem credenciais,URL,proposto; nao nativo
+proveniencia,source_updated_at,TIMESTAMP,"Última atualização declarada pelo fornecedor, se informada",UTC,proposto; nao nativo
+proveniencia,published_at,TIMESTAMP,"Momento original de publicação, quando conhecido",UTC,proposto; nao nativo
+proveniencia,first_seen_at,TIMESTAMP,Primeiro instante em que nosso sistema observou a informação,UTC,proposto; nao nativo
+proveniencia,ingested_at,TIMESTAMP,Instante de chegada ao pipeline,UTC,proposto; nao nativo
+proveniencia,valid_from,TIMESTAMP,"Início da validade do fato no mundo real, quando conhecido",UTC,proposto; nao nativo
+proveniencia,valid_to,TIMESTAMP,Fim da validade; nulo para intervalo ainda aberto,UTC,proposto; nao nativo
+proveniencia,schema_version,STRING,Versão do contrato de transformação usado,texto,proposto; nao nativo
+proveniencia,raw_payload_ref,STRING,Referência interna ao dado bruto preservado,URI,proposto; nao nativo
+proveniencia,license_ref,STRING,Referência aos termos aplicáveis à captura e ao uso,URL/texto,proposto; nao nativo
+proveniencia,quality_status,STRING,"Situação da validação: accepted, quarantined ou pending",enum,proposto; nao nativo
+competicao,competition_id,STRING,ID interno estável da competição,ID,proposto; nao nativo
+competicao,season_id,STRING,ID interno da edição; não inferir apenas pelo mês do jogo,ID,proposto; nao nativo
+competicao,name,STRING,Nome oficial ou nome preferencial documentado,texto,proposto; nao nativo
+competicao,country_code,STRING,País principal; nulo para competição multinacional,ISO 3166-1 alpha-2,proposto; nao nativo
+competicao,confederation,STRING,"Confederação responsável, se aplicável",texto,proposto; nao nativo
+competicao,season_label,STRING,"Rótulo da edição, como 2025/26 ou 2026",texto,proposto; nao nativo
+competicao,starts_on,DATE,Primeiro dia da edição,data,proposto; nao nativo
+competicao,ends_on,DATE,Último dia da edição,data,proposto; nao nativo
+competicao,gender_category,STRING,Categoria declarada pela competição,texto,proposto; nao nativo
+competicao,age_category,STRING,"Categoria etária: sênior, sub-20 etc.",texto,proposto; nao nativo
+competicao,discipline,STRING,"Futebol de campo, futsal ou futebol de areia",enum,proposto; nao nativo
+competicao,tier,INT64,Nível da divisão nacional quando aplicável,ordinal,proposto; nao nativo
+equipe,team_id,STRING,ID interno da equipe,ID,proposto; nao nativo
+equipe,organization_id,STRING,Organização que pode manter equipes de várias categorias,ID,proposto; nao nativo
+equipe,name,STRING,Nome de exibição da equipe,texto,proposto; nao nativo
+equipe,short_name,STRING,Nome curto ou sigla,texto,proposto; nao nativo
+equipe,country_code,STRING,País de representação ou sede,ISO 3166-1 alpha-2,proposto; nao nativo
+equipe,team_type,STRING,Club ou national_team,enum,proposto; nao nativo
+equipe,gender_category,STRING,Categoria da equipe,texto,proposto; nao nativo
+equipe,age_category,STRING,Categoria etária,texto,proposto; nao nativo
+equipe,founded_on,DATE,Fundação; não inventar dia/mês se só o ano for conhecido,data,proposto; nao nativo
+equipe,stadium_id,STRING,Estádio habitual; não implica mando de todos os jogos,ID,proposto; nao nativo
+equipe,website,STRING,Site oficial,URL,proposto; nao nativo
+jogador,player_id,STRING,ID interno estável da pessoa,ID,proposto; nao nativo
+jogador,full_name,STRING,Nome completo publicado,texto,proposto; nao nativo
+jogador,display_name,STRING,Nome usado em escalações e interface,texto,proposto; nao nativo
+jogador,birth_date,DATE,Data de nascimento publicada,data,proposto; nao nativo
+jogador,nationalities,ARRAY<STRING>,Nacionalidades declaradas; podem ser múltiplas,ISO 3166-1 alpha-2,proposto; nao nativo
+jogador,birth_country,STRING,"País de nascimento, distinto de nacionalidade",ISO 3166-1 alpha-2,proposto; nao nativo
+jogador,height_cm,FLOAT64,Altura normalizada,cm,proposto; nao nativo
+jogador,weight_kg,FLOAT64,Peso informado e datado quando possível,kg,proposto; nao nativo
+jogador,preferred_foot,STRING,"Pé preferido: left, right, both ou unknown",enum,proposto; nao nativo
+jogador,primary_position,STRING,Posição principal normalizada com tabela de equivalência,enum,proposto; nao nativo
+elenco,player_id,STRING,Atleta vinculado,ID,proposto; nao nativo
+elenco,team_id,STRING,Equipe do vínculo,ID,proposto; nao nativo
+elenco,competition_id,STRING,Competição da inscrição quando específica,ID,proposto; nao nativo
+elenco,season_id,STRING,Edição de referência,ID,proposto; nao nativo
+elenco,jersey_number,INT64,Número usado nesse vínculo/temporada,número,proposto; nao nativo
+elenco,contract_start,DATE,Início do contrato quando publicado,data,proposto; nao nativo
+elenco,contract_end,DATE,"Fim do contrato divulgado, sem inferir renovação",data,proposto; nao nativo
+elenco,on_loan,BOOL,Se o vínculo com a equipe é por empréstimo,booleano,proposto; nao nativo
+elenco,parent_team_id,STRING,Equipe detentora do vínculo de origem se publicada,ID,proposto; nao nativo
+partida,match_id,STRING,ID interno estável; não muda em reagendamento,ID,proposto; nao nativo
+partida,competition_id,STRING,Competição da partida,ID,proposto; nao nativo
+partida,season_id,STRING,Edição da competição,ID,proposto; nao nativo
+partida,home_team_id,STRING,Equipe designada mandante,ID,proposto; nao nativo
+partida,away_team_id,STRING,Equipe designada visitante,ID,proposto; nao nativo
+partida,kickoff_utc,TIMESTAMP,Horário previsto/confirmado com histórico de revisões,UTC,proposto; nao nativo
+partida,stadium_id,STRING,Local efetivo do jogo,ID,proposto; nao nativo
+partida,neutral_venue,BOOL,Indica campo neutro; distinto de mandante administrativo,booleano,proposto; nao nativo
+partida,stage,STRING,Fase do torneio,texto,proposto; nao nativo
+partida,round,STRING,Rodada ou etapa; pode não ser número,texto,proposto; nao nativo
+partida,leg,INT64,"Perna da eliminatória, se aplicável",ordinal,proposto; nao nativo
+partida,status,STRING,"scheduled, live, halftime, finished, postponed, cancelled, abandoned ou unknown",enum,proposto; nao nativo
+partida,home_score_90,INT64,Gols do mandante até o fim do tempo regulamentar com acréscimos,gols,proposto; nao nativo
+partida,away_score_90,INT64,Gols do visitante no tempo regulamentar com acréscimos,gols,proposto; nao nativo
+partida,home_score_et,INT64,Gols adicionais do mandante só na prorrogação,gols,proposto; nao nativo
+partida,away_score_et,INT64,Gols adicionais do visitante só na prorrogação,gols,proposto; nao nativo
+partida,home_penalties,INT64,Cobranças convertidas pelo mandante na disputa de pênaltis,gols,proposto; nao nativo
+partida,away_penalties,INT64,Cobranças convertidas pelo visitante na disputa de pênaltis,gols,proposto; nao nativo
+partida,winner_team_id,STRING,Vencedor do jogo conforme regra; nulo em empate,ID,proposto; nao nativo
+partida,qualified_team_id,STRING,Equipe que avançou na eliminatória; pode não vencer este jogo,ID,proposto; nao nativo
+partida,attendance,INT64,Público publicado; definição deve ser preservada,pessoas,proposto; nao nativo
+classificacao,competition_id,STRING,Competição,ID,proposto; nao nativo
+classificacao,season_id,STRING,Edição,ID,proposto; nao nativo
+classificacao,group_id,STRING,Grupo/fase; usar valor explícito único para tabela geral,ID,proposto; nao nativo
+classificacao,team_id,STRING,Equipe classificada,ID,proposto; nao nativo
+classificacao,as_of,TIMESTAMP,Instante ao qual a tabela se refere,UTC,proposto; nao nativo
+classificacao,rank,INT64,Posição na tabela,ordinal,proposto; nao nativo
+classificacao,played,INT64,Partidas consideradas na classificação,jogos,proposto; nao nativo
+classificacao,wins,INT64,Vitórias consideradas,jogos,proposto; nao nativo
+classificacao,draws,INT64,Empates considerados,jogos,proposto; nao nativo
+classificacao,losses,INT64,Derrotas consideradas,jogos,proposto; nao nativo
+classificacao,goals_for,INT64,Gols pró considerados,gols,proposto; nao nativo
+classificacao,goals_against,INT64,Gols contra considerados,gols,proposto; nao nativo
+classificacao,points,NUMERIC,Pontos oficiais incluindo decisões administrativas,pontos,proposto; nao nativo
+classificacao,points_adjustment,NUMERIC,Ajuste administrativo quando explicitamente informado,pontos,proposto; nao nativo
+escalacao,match_id,STRING,Partida,ID,proposto; nao nativo
+escalacao,team_id,STRING,Equipe na partida,ID,proposto; nao nativo
+escalacao,player_id,STRING,Jogador,ID,proposto; nao nativo
+escalacao,lineup_status,STRING,"Predicted, confirmed ou revised",enum,proposto; nao nativo
+escalacao,is_starter,BOOL,Se entrou como titular,booleano,proposto; nao nativo
+escalacao,is_captain,BOOL,Se capitão nessa escalação,booleano,proposto; nao nativo
+escalacao,position,STRING,Posição exercida no jogo,texto,proposto; nao nativo
+escalacao,jersey_number,INT64,Camisa nessa partida,número,proposto; nao nativo
+escalacao,formation,STRING,Esquema tático declarado para a equipe,texto,proposto; nao nativo
+escalacao,minutes_played,FLOAT64,Tempo jogado conforme definição do fornecedor,minutos,proposto; nao nativo
+evento,event_id,STRING,ID interno; preservar o original na proveniência,ID,proposto; nao nativo
+evento,match_id,STRING,Partida,ID,proposto; nao nativo
+evento,sequence,INT64,Ordem dentro do feed,ordinal,proposto; nao nativo
+evento,period,STRING,"1H, 2H, ET1, ET2 ou PSO",enum,proposto; nao nativo
+evento,minute,INT64,Minuto exibido no relógio do jogo,minutos,proposto; nao nativo
+evento,added_minute,INT64,"Acréscimo explícito, como 2 em 45+2",minutos,proposto; nao nativo
+evento,elapsed_seconds,FLOAT64,Segundos desde o início do período definido,segundos,proposto; nao nativo
+evento,team_id,STRING,Equipe associada à ação,ID,proposto; nao nativo
+evento,player_id,STRING,Atleta principal; pode ser desconhecido,ID,proposto; nao nativo
+evento,related_player_id,STRING,"Outro atleta, com papel definido no qualifier",ID,proposto; nao nativo
+evento,event_type,STRING,"Goal, pass, shot, foul, card, substitution etc.",enum,proposto; nao nativo
+evento,outcome,STRING,Resultado da ação segundo o modelo de eventos,texto,proposto; nao nativo
+evento,x,FLOAT64,"Coordenada longitudinal, no sistema declarado",unidade do sistema,proposto; nao nativo
+evento,y,FLOAT64,"Coordenada transversal, no sistema declarado",unidade do sistema,proposto; nao nativo
+evento,coordinate_system,STRING,"Origem, dimensão e orientação do campo; obrigatório se x/y preenchidos",texto,proposto; nao nativo
+evento,qualifiers,JSON,"Detalhes específicos, preservando semântica do provedor",objeto,proposto; nao nativo
+evento,is_cancelled,BOOL,Ação anulada/corrigida; preservar histórico,booleano,proposto; nao nativo
+estatistica,metric_record_id,STRING,ID interno da observação estatística,ID,proposto; nao nativo
+estatistica,subject_type,STRING,Player ou team,enum,proposto; nao nativo
+estatistica,subject_id,STRING,ID do jogador ou equipe,ID,proposto; nao nativo
+estatistica,scope_type,STRING,"Match, season, competition ou rolling_window",enum,proposto; nao nativo
+estatistica,scope_id,STRING,Partida/temporada/janela relacionada,ID,proposto; nao nativo
+estatistica,metric_name,STRING,"Código como goals, shots_total, passes_completed, xg ou rating",texto,proposto; nao nativo
+estatistica,value,FLOAT64,"Valor numérico; nulo quando ausente, nunca zero artificial",unidade declarada,proposto; nao nativo
+estatistica,unit,STRING,"Count, fraction, percent, goals, metres etc.",texto,proposto; nao nativo
+estatistica,aggregation,STRING,"Sum, mean, per90, rate, maximum etc.",enum,proposto; nao nativo
+estatistica,denominator,FLOAT64,"Base do cálculo, se for taxa/média",unidade da base,proposto; nao nativo
+estatistica,period,STRING,"Partida inteira, primeiro tempo, janela etc.",texto,proposto; nao nativo
+estatistica,model_version,STRING,"Fornecedor e versão para xG, notas e outras métricas derivadas",texto,proposto; nao nativo
+rastreamento,match_id,STRING,Partida,ID,proposto; nao nativo
+rastreamento,frame_id,STRING,Identificador de frame ou amostra,ID,proposto; nao nativo
+rastreamento,tracked_object_id,STRING,Objeto rastreado; pode ser anônimo,ID,proposto; nao nativo
+rastreamento,player_id,STRING,Atleta resolvido; nulo quando anônimo ou bola,ID,proposto; nao nativo
+rastreamento,object_type,STRING,"Player, ball ou referee",enum,proposto; nao nativo
+rastreamento,period,STRING,Período de jogo,enum,proposto; nao nativo
+rastreamento,timestamp_seconds,FLOAT64,Tempo em relação ao início declarado do período/vídeo,segundos,proposto; nao nativo
+rastreamento,x,FLOAT64,Coordenada longitudinal no sistema original,unidade declarada,proposto; nao nativo
+rastreamento,y,FLOAT64,Coordenada transversal no sistema original,unidade declarada,proposto; nao nativo
+rastreamento,z,FLOAT64,Altura quando disponível,unidade declarada,proposto; nao nativo
+rastreamento,coordinate_system,STRING,"Dimensões, origem, orientação e unidade",texto,proposto; nao nativo
+rastreamento,sample_rate_hz,FLOAT64,Frequência nominal da captura quando conhecida,Hz,proposto; nao nativo
+rastreamento,is_observed,BOOL,Distingue observação direta de posição inferida quando informado,booleano,proposto; nao nativo
+rastreamento,event_id,STRING,Evento associado a freeze-frame; não implica sequência contínua,ID,proposto; nao nativo
+transferencia,transfer_id,STRING,ID interno da movimentação,ID,proposto; nao nativo
+transferencia,player_id,STRING,Atleta,ID,proposto; nao nativo
+transferencia,from_team_id,STRING,Origem; nulo se desconhecida ou sem clube,ID,proposto; nao nativo
+transferencia,to_team_id,STRING,Destino; nulo para saída sem destino conhecido,ID,proposto; nao nativo
+transferencia,transfer_type,STRING,"Permanent, loan, loan_return, free, release ou unknown",enum,proposto; nao nativo
+transferencia,status,STRING,"Rumour, reported, announced, registered, completed, cancelled ou denied",enum,proposto; nao nativo
+transferencia,announced_at,TIMESTAMP,Quando o anúncio foi publicado,UTC,proposto; nao nativo
+transferencia,effective_on,DATE,Quando o vínculo passa a valer,data,proposto; nao nativo
+transferencia,fee_amount,NUMERIC,Taxa publicada; nulo para valor não divulgado,moeda declarada,proposto; nao nativo
+transferencia,fee_currency,STRING,Moeda da taxa publicada,ISO 4217,proposto; nao nativo
+transferencia,fee_status,STRING,"Confirmed, reported, estimated, undisclosed ou free",enum,proposto; nao nativo
+transferencia,add_ons_amount,NUMERIC,Bônus condicionais separados da parcela fixa,moeda declarada,proposto; nao nativo
+transferencia,loan_end_on,DATE,Fim previsto de empréstimo quando publicado,data,proposto; nao nativo
+transferencia,evidence_article_id,STRING,Notícia/documento que fundamenta esse status,ID,proposto; nao nativo
+valor_mercado,player_id,STRING,Atleta avaliado,ID,proposto; nao nativo
+valor_mercado,valuation_date,DATE,"Data da avaliação, não da coleta",data,proposto; nao nativo
+valor_mercado,amount,NUMERIC,Valor estimado,moeda declarada,proposto; nao nativo
+valor_mercado,currency,STRING,Moeda da estimativa,ISO 4217,proposto; nao nativo
+valor_mercado,method,STRING,"Comunidade, modelo estatístico ou outra metodologia publicada",texto,proposto; nao nativo
+valor_mercado,model_version,STRING,"Versão do modelo, se divulgada",texto,proposto; nao nativo
+registro,registration_id,STRING,ID interno do registro/publicação,ID,proposto; nao nativo
+registro,player_id,STRING,Atleta identificado,ID,proposto; nao nativo
+registro,team_id,STRING,Clube identificado na publicação,ID,proposto; nao nativo
+registro,federation,STRING,Entidade responsável,texto,proposto; nao nativo
+registro,registration_number,STRING,"Número esportivo publicado, quando necessário para conciliação",ID,proposto; nao nativo
+registro,registration_type,STRING,Tipo de movimentação exatamente definido na fonte,texto,proposto; nao nativo
+registro,publication_date,DATE,Data do boletim/publicação,data,proposto; nao nativo
+registro,effective_on,DATE,"Data de efeito, apenas se explicitada",data,proposto; nao nativo
+registro,document_id,STRING,Referência ao boletim de origem,ID,proposto; nao nativo
+noticia,article_id,STRING,ID interno da matéria,ID,proposto; nao nativo
+noticia,canonical_url,STRING,URL canônica sem rastreadores,URL,proposto; nao nativo
+noticia,publisher,STRING,Redação/agência original,texto,proposto; nao nativo
+noticia,aggregator,STRING,"Serviço que entregou a matéria, se diferente",texto,proposto; nao nativo
+noticia,title,STRING,Título autorizado para armazenamento/exibição,texto,proposto; nao nativo
+noticia,summary,STRING,Resumo autorizado ou elaborado com proveniência,texto,proposto; nao nativo
+noticia,author,STRING,Autoria pública quando informada,texto,proposto; nao nativo
+noticia,language,STRING,Idioma do conteúdo,BCP 47,proposto; nao nativo
+noticia,published_at,TIMESTAMP,"Hora original da publicação, se conhecida",UTC,proposto; nao nativo
+noticia,updated_at,TIMESTAMP,"Hora da revisão editorial, se conhecida",UTC,proposto; nao nativo
+noticia,topic,STRING,"Match, transfer, injury, finance, disciplinary etc.",enum,proposto; nao nativo
+noticia,claim_status,STRING,"Reported, rumour, confirmed, denied ou unknown; por alegação quando necessário",enum,proposto; nao nativo
+noticia,entity_mentions,JSON,Menções e vínculos com jogadores/equipes; incluir confiança da resolução,objeto,proposto; nao nativo
+noticia,story_cluster_id,STRING,Agrupamento de republicações e matérias sobre o mesmo fato,ID,proposto; nao nativo
+noticia,original_source_url,STRING,"Link da apuração ou anúncio primário, quando localizado",URL,proposto; nao nativo
+indisponibilidade,availability_id,STRING,ID interno da observação,ID,proposto; nao nativo
+indisponibilidade,player_id,STRING,Atleta,ID,proposto; nao nativo
+indisponibilidade,team_id,STRING,Equipe no momento do relato,ID,proposto; nao nativo
+indisponibilidade,match_id,STRING,"Partida relacionada, quando específico",ID,proposto; nao nativo
+indisponibilidade,reason,STRING,Motivo publicado; não inferir diagnóstico,texto,proposto; nao nativo
+indisponibilidade,availability_status,STRING,"Out, doubtful, available ou unknown",enum,proposto; nao nativo
+indisponibilidade,reported_on,DATE,Data do boletim/relato,data,proposto; nao nativo
+indisponibilidade,expected_return_on,DATE,"Retorno previsto, não garantido",data,proposto; nao nativo
+indisponibilidade,confirmed_return_on,DATE,Retorno confirmado quando observado,data,proposto; nao nativo
+indisponibilidade,evidence_article_id,STRING,Boletim/notícia que fundamenta a informação,ID,proposto; nao nativo
+sancao,sanction_id,STRING,ID interno da decisão,ID,proposto; nao nativo
+sancao,subject_type,STRING,"Player, team, coach ou official",enum,proposto; nao nativo
+sancao,subject_id,STRING,Entidade envolvida,ID,proposto; nao nativo
+sancao,competition_id,STRING,"Competição em que vale a decisão, se explícita",ID,proposto; nao nativo
+sancao,decision_date,DATE,Data da decisão,data,proposto; nao nativo
+sancao,matches_suspended,INT64,Número de jogos de suspensão informado,jogos,proposto; nao nativo
+sancao,status,STRING,"Issued, appealed, stayed, served, overturned ou unknown",enum,proposto; nao nativo
+sancao,document_id,STRING,Documento da decisão; não apenas manchete,ID,proposto; nao nativo
+arbitro,referee_id,STRING,ID interno da pessoa,ID,proposto; nao nativo
+arbitro,name,STRING,Nome publicado,texto,proposto; nao nativo
+arbitro,country_code,STRING,País/federação representada quando informado,ISO 3166-1 alpha-2,proposto; nao nativo
+arbitro,match_id,STRING,Partida da nomeação,ID,proposto; nao nativo
+arbitro,role,STRING,"Main, assistant, fourth, VAR, AVAR etc.",enum,proposto; nao nativo
+arbitro,appointment_status,STRING,"Appointed, replaced ou confirmed",enum,proposto; nao nativo
+estadio,stadium_id,STRING,ID interno do local,ID,proposto; nao nativo
+estadio,name,STRING,Nome do estádio ou campo,texto,proposto; nao nativo
+estadio,city,STRING,Município,texto,proposto; nao nativo
+estadio,country_code,STRING,País,ISO 3166-1 alpha-2,proposto; nao nativo
+estadio,latitude,FLOAT64,Latitude do local,graus WGS84,proposto; nao nativo
+estadio,longitude,FLOAT64,Longitude do local,graus WGS84,proposto; nao nativo
+estadio,timezone,STRING,Fuso geográfico; não apenas deslocamento fixo,IANA,proposto; nao nativo
+estadio,capacity,INT64,Capacidade publicada com validade temporal,pessoas,proposto; nao nativo
+estadio,surface,STRING,"Natural, artificial, hybrid ou unknown",enum,proposto; nao nativo
+estadio,altitude_m,FLOAT64,Altitude quando obtida de fonte adequada,m,proposto; nao nativo
+clima,weather_id,STRING,ID interno da amostra,ID,proposto; nao nativo
+clima,match_id,STRING,"Partida associada, se houver",ID,proposto; nao nativo
+clima,stadium_id,STRING,Local da consulta,ID,proposto; nao nativo
+clima,valid_at,TIMESTAMP,Horário ao qual a condição se refere,UTC,proposto; nao nativo
+clima,issued_at,TIMESTAMP,Momento de emissão do modelo/previsão quando conhecido,UTC,proposto; nao nativo
+clima,data_kind,STRING,"Forecast, observation ou reanalysis",enum,proposto; nao nativo
+clima,temperature_c,FLOAT64,Temperatura do ar,°C,proposto; nao nativo
+clima,humidity_pct,FLOAT64,Umidade relativa,percentual 0–100,proposto; nao nativo
+clima,precipitation_mm,FLOAT64,Acumulado no intervalo declarado,mm,proposto; nao nativo
+clima,wind_kph,FLOAT64,Velocidade do vento,km/h,proposto; nao nativo
+clima,interval_minutes,INT64,Janela temporal da medida/acumulado,minutos,proposto; nao nativo
+bilheteria,match_id,STRING,Partida,ID,proposto; nao nativo
+bilheteria,document_id,STRING,Boletim financeiro de origem,ID,proposto; nao nativo
+bilheteria,paid_attendance,INT64,Público pagante segundo o documento,pessoas,proposto; nao nativo
+bilheteria,total_attendance,INT64,Público total segundo o documento,pessoas,proposto; nao nativo
+bilheteria,gross_revenue,NUMERIC,Receita bruta de bilheteria,moeda declarada,proposto; nao nativo
+bilheteria,expenses,NUMERIC,Despesas discriminadas ou total publicadas,moeda declarada,proposto; nao nativo
+bilheteria,net_revenue,NUMERIC,Receita líquida do evento publicada,moeda declarada,proposto; nao nativo
+bilheteria,currency,STRING,Moeda do boletim,ISO 4217,proposto; nao nativo
+odd,quote_id,STRING,ID interno da cotação observada,ID,proposto; nao nativo
+odd,match_id,STRING,Evento esportivo resolvido,ID,proposto; nao nativo
+odd,bookmaker,STRING,Casa ou exchange,texto,proposto; nao nativo
+odd,market,STRING,"1X2, totals, spread, both_teams_score, player_prop etc.",enum,proposto; nao nativo
+odd,period,STRING,"90min, first_half, including_et ou outra definição explícita",texto,proposto; nao nativo
+odd,selection,STRING,"Home, draw, away, over, under ou seleção do mercado",texto,proposto; nao nativo
+odd,line,NUMERIC,"Linha do mercado quando houver, como total 2.5",unidade do mercado,proposto; nao nativo
+odd,decimal_odds,NUMERIC,Cotação convertida ao formato decimal,razão > 1,proposto; nao nativo
+odd,quoted_at,TIMESTAMP,Hora informada pelo fornecedor para a cotação,UTC,proposto; nao nativo
+odd,observed_at,TIMESTAMP,Quando a cotação foi observada pelo nosso sistema,UTC,proposto; nao nativo
+odd,is_live,BOOL,Se cotação foi oferecida durante o jogo,booleano,proposto; nao nativo
+odd,side,STRING,"Back, lay ou bookmaker",enum,proposto; nao nativo
+odd,volume,NUMERIC,"Volume informado, com moeda e definição se houver",moeda declarada,proposto; nao nativo
+rating,subject_id,STRING,Equipe ou atleta avaliado,ID,proposto; nao nativo
+rating,rating_system,STRING,"Elo, SPI, UEFA_coefficient ou outro sistema",texto,proposto; nao nativo
+rating,rating_value,FLOAT64,Valor na escala original,escala do modelo,proposto; nao nativo
+rating,rank,INT64,Posição no universo avaliado,ordinal,proposto; nao nativo
+rating,as_of,TIMESTAMP,Momento ao qual o índice se refere,UTC,proposto; nao nativo
+rating,model_version,STRING,Metodologia/versão identificável,texto,proposto; nao nativo
+previsao,match_id,STRING,Partida prevista,ID,proposto; nao nativo
+previsao,model_version,STRING,Modelo e versão; distinguir fornecedor e modelo próprio,texto,proposto; nao nativo
+previsao,issued_at,TIMESTAMP,Momento de geração da previsão,UTC,proposto; nao nativo
+previsao,prediction_horizon,STRING,"Resultado em 90min, classificação ou outro alvo explícito",texto,proposto; nao nativo
+previsao,home_win_probability,FLOAT64,Probabilidade de vitória do mandante no alvo escolhido,fração 0–1,proposto; nao nativo
+previsao,draw_probability,FLOAT64,Probabilidade de empate; nulo se alvo não admite empate,fração 0–1,proposto; nao nativo
+previsao,away_win_probability,FLOAT64,Probabilidade de vitória do visitante no alvo escolhido,fração 0–1,proposto; nao nativo
+previsao,expected_home_goals,FLOAT64,Gols esperados pelo modelo antes da partida,gols,proposto; nao nativo
+previsao,expected_away_goals,FLOAT64,Gols esperados pelo modelo antes da partida,gols,proposto; nao nativo
+fantasy,game_name,STRING,"FPL, Cartola ou outro produto",texto,proposto; nao nativo
+fantasy,season_id,STRING,Temporada do fantasy,ID,proposto; nao nativo
+fantasy,round,STRING,"Rodada/deadline do produto, distinta da rodada física em jogos adiados",texto,proposto; nao nativo
+fantasy,player_id,STRING,Atleta resolvido,ID,proposto; nao nativo
+fantasy,fantasy_player_id,STRING,ID original do atleta nessa edição do fantasy,ID,proposto; nao nativo
+fantasy,price,NUMERIC,Preço normalizado após verificar escala original,moeda virtual,proposto; nao nativo
+fantasy,points,FLOAT64,Pontos segundo as regras vigentes,pontos fantasy,proposto; nao nativo
+fantasy,selected_pct,FLOAT64,"Porcentagem de escalação, quando publicada",percentual 0–100,proposto; nao nativo
+fantasy,status,STRING,Status no jogo fantasy; não diagnóstico clínico,texto,proposto; nao nativo
+fantasy,deadline_at,TIMESTAMP,Fechamento do mercado/escalação,UTC,proposto; nao nativo
+fantasy,rules_version,STRING,Edição das regras e pesos de scouts,texto,proposto; nao nativo
+salario,player_id,STRING,Atleta,ID,proposto; nao nativo
+salario,team_id,STRING,Clube pagador,ID,proposto; nao nativo
+salario,season_id,STRING,Temporada de referência,ID,proposto; nao nativo
+salario,amount,NUMERIC,Salário divulgado ou estimado,moeda declarada,proposto; nao nativo
+salario,currency,STRING,Moeda,ISO 4217,proposto; nao nativo
+salario,pay_period,STRING,"Weekly, monthly ou annual",enum,proposto; nao nativo
+salario,gross_or_net,STRING,"Gross, net ou unknown",enum,proposto; nao nativo
+salario,includes_bonuses,BOOL,Se inclui bônus; nulo quando desconhecido,booleano,proposto; nao nativo
+salario,estimate_status,STRING,"Confirmed, reported, estimated ou unknown",enum,proposto; nao nativo
+financas_clube,team_id,STRING,Clube ou entidade contábil,ID,proposto; nao nativo
+financas_clube,period_start,DATE,Início do período contábil,data,proposto; nao nativo
+financas_clube,period_end,DATE,Fim do período contábil; não presumir temporada esportiva,data,proposto; nao nativo
+financas_clube,metric_name,STRING,"Revenue, broadcast_revenue, matchday_revenue, commercial_revenue etc.",texto,proposto; nao nativo
+financas_clube,amount,NUMERIC,Valor da rubrica com escala normalizada,moeda declarada,proposto; nao nativo
+financas_clube,currency,STRING,Moeda original,ISO 4217,proposto; nao nativo
+financas_clube,accounting_scope,STRING,"Entidade consolidada, clube, SAF ou outro perímetro",texto,proposto; nao nativo
+financas_clube,document_id,STRING,Relatório de origem e edição,ID,proposto; nao nativo
+relatorio_mercado,report_id,STRING,Relatório de origem,ID,proposto; nao nativo
+relatorio_mercado,period_start,DATE,Início do período analisado,data,proposto; nao nativo
+relatorio_mercado,period_end,DATE,Fim do período analisado,data,proposto; nao nativo
+relatorio_mercado,segment,STRING,"País, liga, gênero, faixa etária ou outro recorte explicitado",texto,proposto; nao nativo
+relatorio_mercado,metric_name,STRING,"Transfer_count, total_fees, average_age etc.",texto,proposto; nao nativo
+relatorio_mercado,value,NUMERIC,Valor reportado,unidade declarada,proposto; nao nativo
+relatorio_mercado,unit,STRING,"Pessoas, transferências, anos, moeda etc.",texto,proposto; nao nativo
+relatorio_mercado,methodology,STRING,Definição do universo e critérios do relatório,texto,proposto; nao nativo
+midia,media_id,STRING,ID interno da mídia,ID,proposto; nao nativo
+midia,media_type,STRING,"Image, video, audio ou embed",enum,proposto; nao nativo
+midia,title,STRING,Título/descrição autorizada,texto,proposto; nao nativo
+midia,publisher,STRING,"Canal, agência ou autor responsável",texto,proposto; nao nativo
+midia,published_at,TIMESTAMP,Publicação,UTC,proposto; nao nativo
+midia,source_page_url,STRING,Página original do item,URL,proposto; nao nativo
+midia,embed_url,STRING,Endereço de incorporação quando permitido,URL,proposto; nao nativo
+midia,thumbnail_url,STRING,Miniatura com condições de uso próprias,URL,proposto; nao nativo
+midia,creator,STRING,Autor/crédito público,texto,proposto; nao nativo
+midia,license_name,STRING,Licença específica do item,texto,proposto; nao nativo
+midia,attribution_text,STRING,Crédito exigido pelo detentor,texto,proposto; nao nativo
+transmissao,match_id,STRING,Partida,ID,proposto; nao nativo
+transmissao,broadcaster,STRING,Canal ou plataforma,texto,proposto; nao nativo
+transmissao,territory,STRING,País/região onde a disponibilidade foi publicada,texto,proposto; nao nativo
+transmissao,starts_at,TIMESTAMP,"Início da transmissão, distinto do kickoff",UTC,proposto; nao nativo
+transmissao,access_type,STRING,"Free, subscription, pay_per_view ou unknown",enum,proposto; nao nativo
+transmissao,listing_url,STRING,Página que comprova a grade,URL,proposto; nao nativo
+documento,document_id,STRING,ID interno do documento,ID,proposto; nao nativo
+documento,document_type,STRING,"Match_report, regulation, financial_report, decision etc.",enum,proposto; nao nativo
+documento,title,STRING,Título da publicação,texto,proposto; nao nativo
+documento,issuer,STRING,Entidade emissora,texto,proposto; nao nativo
+documento,published_on,DATE,Data de publicação,data,proposto; nao nativo
+documento,version,STRING,"Versão, revisão ou hash do arquivo",texto,proposto; nao nativo
+documento,url,STRING,Local de obtenção,URL,proposto; nao nativo
+documento,related_entity_ids,JSON,"Jogos, atletas, equipes ou competições relacionados",objeto,proposto; nao nativo
+identificador,source_id,STRING,Fornecedor dono do identificador externo,ID,proposto; nao nativo
+identificador,entity_type,STRING,"Player, team, match, competition ou stadium",enum,proposto; nao nativo
+identificador,external_id,STRING,ID externo preservado como texto,ID,proposto; nao nativo
+identificador,internal_id,STRING,ID canônico do Foota Toota,ID,proposto; nao nativo
+identificador,match_method,STRING,"Exact_external_id, manual, composite ou probabilistic",enum,proposto; nao nativo
+identificador,match_confidence,FLOAT64,Confiança interna de conciliação; não probabilidade universal,fração 0–1,proposto; nao nativo
+identificador,reviewed,BOOL,Se o vínculo foi revisado,booleano,proposto; nao nativo

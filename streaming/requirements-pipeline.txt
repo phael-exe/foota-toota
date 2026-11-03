@@ -1,0 +1,3 @@
+# Pipeline de streaming (pipeline.py). A versão local do Beam precisa ser a mesma dos workers do
+# Dataflow, que usam a imagem do SDK para esta versão e para o Python que lançou o job (3.12).
+apache-beam[gcp]==2.77.0

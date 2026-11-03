@@ -1,0 +1,3020 @@
+{
+  "data": "2026-09-14",
+  "status": "Modelo conceitual proposto; nenhuma tabela foi criada ou alterada.",
+  "entidades": {
+    "proveniencia": {
+      "nome": "Proveniência comum a todos os registros",
+      "granularidade": "Uma observação coletada de uma fonte",
+      "chave_logica": [
+        "source_id",
+        "source_record_id",
+        "ingested_at"
+      ],
+      "campos": [
+        {
+          "entidade": "proveniencia",
+          "campo": "source_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Identificador da fonte no catálogo; não é segredo",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "proveniencia",
+          "campo": "source_record_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Identificador original; usar chave composta documentada quando não houver ID",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "proveniencia",
+          "campo": "source_url",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "URL da evidência ou endpoint sem credenciais",
+          "unidade": "URL",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "proveniencia",
+          "campo": "source_updated_at",
+          "tipo_bigquery_sugerido": "TIMESTAMP",
+          "descricao": "Última atualização declarada pelo fornecedor, se informada",
+          "unidade": "UTC",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "proveniencia",
+          "campo": "published_at",
+          "tipo_bigquery_sugerido": "TIMESTAMP",
+          "descricao": "Momento original de publicação, quando conhecido",
+          "unidade": "UTC",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "proveniencia",
+          "campo": "first_seen_at",
+          "tipo_bigquery_sugerido": "TIMESTAMP",
+          "descricao": "Primeiro instante em que nosso sistema observou a informação",
+          "unidade": "UTC",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "proveniencia",
+          "campo": "ingested_at",
+          "tipo_bigquery_sugerido": "TIMESTAMP",
+          "descricao": "Instante de chegada ao pipeline",
+          "unidade": "UTC",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "proveniencia",
+          "campo": "valid_from",
+          "tipo_bigquery_sugerido": "TIMESTAMP",
+          "descricao": "Início da validade do fato no mundo real, quando conhecido",
+          "unidade": "UTC",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "proveniencia",
+          "campo": "valid_to",
+          "tipo_bigquery_sugerido": "TIMESTAMP",
+          "descricao": "Fim da validade; nulo para intervalo ainda aberto",
+          "unidade": "UTC",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "proveniencia",
+          "campo": "schema_version",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Versão do contrato de transformação usado",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "proveniencia",
+          "campo": "raw_payload_ref",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Referência interna ao dado bruto preservado",
+          "unidade": "URI",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "proveniencia",
+          "campo": "license_ref",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Referência aos termos aplicáveis à captura e ao uso",
+          "unidade": "URL/texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "proveniencia",
+          "campo": "quality_status",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Situação da validação: accepted, quarantined ou pending",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "competicao": {
+      "nome": "Competições e edições",
+      "granularidade": "Uma edição de competição com categoria e temporada",
+      "chave_logica": [
+        "competition_id",
+        "season_id"
+      ],
+      "campos": [
+        {
+          "entidade": "competicao",
+          "campo": "competition_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "ID interno estável da competição",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "competicao",
+          "campo": "season_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "ID interno da edição; não inferir apenas pelo mês do jogo",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "competicao",
+          "campo": "name",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Nome oficial ou nome preferencial documentado",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "competicao",
+          "campo": "country_code",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "País principal; nulo para competição multinacional",
+          "unidade": "ISO 3166-1 alpha-2",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "competicao",
+          "campo": "confederation",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Confederação responsável, se aplicável",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "competicao",
+          "campo": "season_label",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Rótulo da edição, como 2025/26 ou 2026",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "competicao",
+          "campo": "starts_on",
+          "tipo_bigquery_sugerido": "DATE",
+          "descricao": "Primeiro dia da edição",
+          "unidade": "data",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "competicao",
+          "campo": "ends_on",
+          "tipo_bigquery_sugerido": "DATE",
+          "descricao": "Último dia da edição",
+          "unidade": "data",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "competicao",
+          "campo": "gender_category",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Categoria declarada pela competição",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "competicao",
+          "campo": "age_category",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Categoria etária: sênior, sub-20 etc.",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "competicao",
+          "campo": "discipline",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Futebol de campo, futsal ou futebol de areia",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "competicao",
+          "campo": "tier",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Nível da divisão nacional quando aplicável",
+          "unidade": "ordinal",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "equipe": {
+      "nome": "Clubes e seleções",
+      "granularidade": "Uma equipe esportiva; categorias separadas",
+      "chave_logica": [
+        "team_id"
+      ],
+      "campos": [
+        {
+          "entidade": "equipe",
+          "campo": "team_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "ID interno da equipe",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "equipe",
+          "campo": "organization_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Organização que pode manter equipes de várias categorias",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "equipe",
+          "campo": "name",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Nome de exibição da equipe",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "equipe",
+          "campo": "short_name",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Nome curto ou sigla",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "equipe",
+          "campo": "country_code",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "País de representação ou sede",
+          "unidade": "ISO 3166-1 alpha-2",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "equipe",
+          "campo": "team_type",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Club ou national_team",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "equipe",
+          "campo": "gender_category",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Categoria da equipe",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "equipe",
+          "campo": "age_category",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Categoria etária",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "equipe",
+          "campo": "founded_on",
+          "tipo_bigquery_sugerido": "DATE",
+          "descricao": "Fundação; não inventar dia/mês se só o ano for conhecido",
+          "unidade": "data",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "equipe",
+          "campo": "stadium_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Estádio habitual; não implica mando de todos os jogos",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "equipe",
+          "campo": "website",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Site oficial",
+          "unidade": "URL",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "jogador": {
+      "nome": "Identidade do jogador",
+      "granularidade": "Uma pessoa; vínculo com clube fica no elenco",
+      "chave_logica": [
+        "player_id"
+      ],
+      "campos": [
+        {
+          "entidade": "jogador",
+          "campo": "player_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "ID interno estável da pessoa",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "jogador",
+          "campo": "full_name",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Nome completo publicado",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "jogador",
+          "campo": "display_name",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Nome usado em escalações e interface",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "jogador",
+          "campo": "birth_date",
+          "tipo_bigquery_sugerido": "DATE",
+          "descricao": "Data de nascimento publicada",
+          "unidade": "data",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "jogador",
+          "campo": "nationalities",
+          "tipo_bigquery_sugerido": "ARRAY<STRING>",
+          "descricao": "Nacionalidades declaradas; podem ser múltiplas",
+          "unidade": "ISO 3166-1 alpha-2",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "jogador",
+          "campo": "birth_country",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "País de nascimento, distinto de nacionalidade",
+          "unidade": "ISO 3166-1 alpha-2",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "jogador",
+          "campo": "height_cm",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Altura normalizada",
+          "unidade": "cm",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "jogador",
+          "campo": "weight_kg",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Peso informado e datado quando possível",
+          "unidade": "kg",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "jogador",
+          "campo": "preferred_foot",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Pé preferido: left, right, both ou unknown",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "jogador",
+          "campo": "primary_position",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Posição principal normalizada com tabela de equivalência",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "elenco": {
+      "nome": "Vínculos e inscrição no elenco",
+      "granularidade": "Jogador, equipe e intervalo de vínculo",
+      "chave_logica": [
+        "player_id",
+        "team_id",
+        "valid_from"
+      ],
+      "campos": [
+        {
+          "entidade": "elenco",
+          "campo": "player_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Atleta vinculado",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "elenco",
+          "campo": "team_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Equipe do vínculo",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "elenco",
+          "campo": "competition_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Competição da inscrição quando específica",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "elenco",
+          "campo": "season_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Edição de referência",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "elenco",
+          "campo": "jersey_number",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Número usado nesse vínculo/temporada",
+          "unidade": "número",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "elenco",
+          "campo": "contract_start",
+          "tipo_bigquery_sugerido": "DATE",
+          "descricao": "Início do contrato quando publicado",
+          "unidade": "data",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "elenco",
+          "campo": "contract_end",
+          "tipo_bigquery_sugerido": "DATE",
+          "descricao": "Fim do contrato divulgado, sem inferir renovação",
+          "unidade": "data",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "elenco",
+          "campo": "on_loan",
+          "tipo_bigquery_sugerido": "BOOL",
+          "descricao": "Se o vínculo com a equipe é por empréstimo",
+          "unidade": "booleano",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "elenco",
+          "campo": "parent_team_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Equipe detentora do vínculo de origem se publicada",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "partida": {
+      "nome": "Partidas",
+      "granularidade": "Uma partida, com versões de observação",
+      "chave_logica": [
+        "match_id"
+      ],
+      "campos": [
+        {
+          "entidade": "partida",
+          "campo": "match_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "ID interno estável; não muda em reagendamento",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "partida",
+          "campo": "competition_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Competição da partida",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "partida",
+          "campo": "season_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Edição da competição",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "partida",
+          "campo": "home_team_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Equipe designada mandante",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "partida",
+          "campo": "away_team_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Equipe designada visitante",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "partida",
+          "campo": "kickoff_utc",
+          "tipo_bigquery_sugerido": "TIMESTAMP",
+          "descricao": "Horário previsto/confirmado com histórico de revisões",
+          "unidade": "UTC",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "partida",
+          "campo": "stadium_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Local efetivo do jogo",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "partida",
+          "campo": "neutral_venue",
+          "tipo_bigquery_sugerido": "BOOL",
+          "descricao": "Indica campo neutro; distinto de mandante administrativo",
+          "unidade": "booleano",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "partida",
+          "campo": "stage",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Fase do torneio",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "partida",
+          "campo": "round",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Rodada ou etapa; pode não ser número",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "partida",
+          "campo": "leg",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Perna da eliminatória, se aplicável",
+          "unidade": "ordinal",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "partida",
+          "campo": "status",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "scheduled, live, halftime, finished, postponed, cancelled, abandoned ou unknown",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "partida",
+          "campo": "home_score_90",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Gols do mandante até o fim do tempo regulamentar com acréscimos",
+          "unidade": "gols",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "partida",
+          "campo": "away_score_90",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Gols do visitante no tempo regulamentar com acréscimos",
+          "unidade": "gols",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "partida",
+          "campo": "home_score_et",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Gols adicionais do mandante só na prorrogação",
+          "unidade": "gols",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "partida",
+          "campo": "away_score_et",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Gols adicionais do visitante só na prorrogação",
+          "unidade": "gols",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "partida",
+          "campo": "home_penalties",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Cobranças convertidas pelo mandante na disputa de pênaltis",
+          "unidade": "gols",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "partida",
+          "campo": "away_penalties",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Cobranças convertidas pelo visitante na disputa de pênaltis",
+          "unidade": "gols",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "partida",
+          "campo": "winner_team_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Vencedor do jogo conforme regra; nulo em empate",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "partida",
+          "campo": "qualified_team_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Equipe que avançou na eliminatória; pode não vencer este jogo",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "partida",
+          "campo": "attendance",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Público publicado; definição deve ser preservada",
+          "unidade": "pessoas",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "classificacao": {
+      "nome": "Tabelas de classificação",
+      "granularidade": "Equipe, grupo, edição e instante da tabela",
+      "chave_logica": [
+        "competition_id",
+        "season_id",
+        "group_id",
+        "team_id",
+        "as_of"
+      ],
+      "campos": [
+        {
+          "entidade": "classificacao",
+          "campo": "competition_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Competição",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "classificacao",
+          "campo": "season_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Edição",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "classificacao",
+          "campo": "group_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Grupo/fase; usar valor explícito único para tabela geral",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "classificacao",
+          "campo": "team_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Equipe classificada",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "classificacao",
+          "campo": "as_of",
+          "tipo_bigquery_sugerido": "TIMESTAMP",
+          "descricao": "Instante ao qual a tabela se refere",
+          "unidade": "UTC",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "classificacao",
+          "campo": "rank",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Posição na tabela",
+          "unidade": "ordinal",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "classificacao",
+          "campo": "played",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Partidas consideradas na classificação",
+          "unidade": "jogos",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "classificacao",
+          "campo": "wins",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Vitórias consideradas",
+          "unidade": "jogos",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "classificacao",
+          "campo": "draws",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Empates considerados",
+          "unidade": "jogos",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "classificacao",
+          "campo": "losses",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Derrotas consideradas",
+          "unidade": "jogos",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "classificacao",
+          "campo": "goals_for",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Gols pró considerados",
+          "unidade": "gols",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "classificacao",
+          "campo": "goals_against",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Gols contra considerados",
+          "unidade": "gols",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "classificacao",
+          "campo": "points",
+          "tipo_bigquery_sugerido": "NUMERIC",
+          "descricao": "Pontos oficiais incluindo decisões administrativas",
+          "unidade": "pontos",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "classificacao",
+          "campo": "points_adjustment",
+          "tipo_bigquery_sugerido": "NUMERIC",
+          "descricao": "Ajuste administrativo quando explicitamente informado",
+          "unidade": "pontos",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "escalacao": {
+      "nome": "Escalações e participação",
+      "granularidade": "Um jogador em uma partida",
+      "chave_logica": [
+        "match_id",
+        "team_id",
+        "player_id"
+      ],
+      "campos": [
+        {
+          "entidade": "escalacao",
+          "campo": "match_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Partida",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "escalacao",
+          "campo": "team_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Equipe na partida",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "escalacao",
+          "campo": "player_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Jogador",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "escalacao",
+          "campo": "lineup_status",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Predicted, confirmed ou revised",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "escalacao",
+          "campo": "is_starter",
+          "tipo_bigquery_sugerido": "BOOL",
+          "descricao": "Se entrou como titular",
+          "unidade": "booleano",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "escalacao",
+          "campo": "is_captain",
+          "tipo_bigquery_sugerido": "BOOL",
+          "descricao": "Se capitão nessa escalação",
+          "unidade": "booleano",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "escalacao",
+          "campo": "position",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Posição exercida no jogo",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "escalacao",
+          "campo": "jersey_number",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Camisa nessa partida",
+          "unidade": "número",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "escalacao",
+          "campo": "formation",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Esquema tático declarado para a equipe",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "escalacao",
+          "campo": "minutes_played",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Tempo jogado conforme definição do fornecedor",
+          "unidade": "minutos",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "evento": {
+      "nome": "Ações de jogo",
+      "granularidade": "Uma ação/evento com possibilidade de revisão",
+      "chave_logica": [
+        "event_id"
+      ],
+      "campos": [
+        {
+          "entidade": "evento",
+          "campo": "event_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "ID interno; preservar o original na proveniência",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "evento",
+          "campo": "match_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Partida",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "evento",
+          "campo": "sequence",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Ordem dentro do feed",
+          "unidade": "ordinal",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "evento",
+          "campo": "period",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "1H, 2H, ET1, ET2 ou PSO",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "evento",
+          "campo": "minute",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Minuto exibido no relógio do jogo",
+          "unidade": "minutos",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "evento",
+          "campo": "added_minute",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Acréscimo explícito, como 2 em 45+2",
+          "unidade": "minutos",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "evento",
+          "campo": "elapsed_seconds",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Segundos desde o início do período definido",
+          "unidade": "segundos",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "evento",
+          "campo": "team_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Equipe associada à ação",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "evento",
+          "campo": "player_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Atleta principal; pode ser desconhecido",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "evento",
+          "campo": "related_player_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Outro atleta, com papel definido no qualifier",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "evento",
+          "campo": "event_type",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Goal, pass, shot, foul, card, substitution etc.",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "evento",
+          "campo": "outcome",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Resultado da ação segundo o modelo de eventos",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "evento",
+          "campo": "x",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Coordenada longitudinal, no sistema declarado",
+          "unidade": "unidade do sistema",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "evento",
+          "campo": "y",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Coordenada transversal, no sistema declarado",
+          "unidade": "unidade do sistema",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "evento",
+          "campo": "coordinate_system",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Origem, dimensão e orientação do campo; obrigatório se x/y preenchidos",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "evento",
+          "campo": "qualifiers",
+          "tipo_bigquery_sugerido": "JSON",
+          "descricao": "Detalhes específicos, preservando semântica do provedor",
+          "unidade": "objeto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "evento",
+          "campo": "is_cancelled",
+          "tipo_bigquery_sugerido": "BOOL",
+          "descricao": "Ação anulada/corrigida; preservar histórico",
+          "unidade": "booleano",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "estatistica": {
+      "nome": "Métricas esportivas",
+      "granularidade": "Uma métrica por sujeito, escopo e janela",
+      "chave_logica": [
+        "metric_record_id"
+      ],
+      "campos": [
+        {
+          "entidade": "estatistica",
+          "campo": "metric_record_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "ID interno da observação estatística",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "estatistica",
+          "campo": "subject_type",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Player ou team",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "estatistica",
+          "campo": "subject_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "ID do jogador ou equipe",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "estatistica",
+          "campo": "scope_type",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Match, season, competition ou rolling_window",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "estatistica",
+          "campo": "scope_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Partida/temporada/janela relacionada",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "estatistica",
+          "campo": "metric_name",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Código como goals, shots_total, passes_completed, xg ou rating",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "estatistica",
+          "campo": "value",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Valor numérico; nulo quando ausente, nunca zero artificial",
+          "unidade": "unidade declarada",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "estatistica",
+          "campo": "unit",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Count, fraction, percent, goals, metres etc.",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "estatistica",
+          "campo": "aggregation",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Sum, mean, per90, rate, maximum etc.",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "estatistica",
+          "campo": "denominator",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Base do cálculo, se for taxa/média",
+          "unidade": "unidade da base",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "estatistica",
+          "campo": "period",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Partida inteira, primeiro tempo, janela etc.",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "estatistica",
+          "campo": "model_version",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Fornecedor e versão para xG, notas e outras métricas derivadas",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "rastreamento": {
+      "nome": "Tracking e contexto espacial",
+      "granularidade": "Uma entidade observada num frame/amostra",
+      "chave_logica": [
+        "match_id",
+        "frame_id",
+        "tracked_object_id"
+      ],
+      "campos": [
+        {
+          "entidade": "rastreamento",
+          "campo": "match_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Partida",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "rastreamento",
+          "campo": "frame_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Identificador de frame ou amostra",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "rastreamento",
+          "campo": "tracked_object_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Objeto rastreado; pode ser anônimo",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "rastreamento",
+          "campo": "player_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Atleta resolvido; nulo quando anônimo ou bola",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "rastreamento",
+          "campo": "object_type",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Player, ball ou referee",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "rastreamento",
+          "campo": "period",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Período de jogo",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "rastreamento",
+          "campo": "timestamp_seconds",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Tempo em relação ao início declarado do período/vídeo",
+          "unidade": "segundos",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "rastreamento",
+          "campo": "x",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Coordenada longitudinal no sistema original",
+          "unidade": "unidade declarada",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "rastreamento",
+          "campo": "y",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Coordenada transversal no sistema original",
+          "unidade": "unidade declarada",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "rastreamento",
+          "campo": "z",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Altura quando disponível",
+          "unidade": "unidade declarada",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "rastreamento",
+          "campo": "coordinate_system",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Dimensões, origem, orientação e unidade",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "rastreamento",
+          "campo": "sample_rate_hz",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Frequência nominal da captura quando conhecida",
+          "unidade": "Hz",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "rastreamento",
+          "campo": "is_observed",
+          "tipo_bigquery_sugerido": "BOOL",
+          "descricao": "Distingue observação direta de posição inferida quando informado",
+          "unidade": "booleano",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "rastreamento",
+          "campo": "event_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Evento associado a freeze-frame; não implica sequência contínua",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "transferencia": {
+      "nome": "Movimentações de atletas",
+      "granularidade": "Uma movimentação com versões de confirmação",
+      "chave_logica": [
+        "transfer_id"
+      ],
+      "campos": [
+        {
+          "entidade": "transferencia",
+          "campo": "transfer_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "ID interno da movimentação",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "transferencia",
+          "campo": "player_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Atleta",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "transferencia",
+          "campo": "from_team_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Origem; nulo se desconhecida ou sem clube",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "transferencia",
+          "campo": "to_team_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Destino; nulo para saída sem destino conhecido",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "transferencia",
+          "campo": "transfer_type",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Permanent, loan, loan_return, free, release ou unknown",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "transferencia",
+          "campo": "status",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Rumour, reported, announced, registered, completed, cancelled ou denied",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "transferencia",
+          "campo": "announced_at",
+          "tipo_bigquery_sugerido": "TIMESTAMP",
+          "descricao": "Quando o anúncio foi publicado",
+          "unidade": "UTC",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "transferencia",
+          "campo": "effective_on",
+          "tipo_bigquery_sugerido": "DATE",
+          "descricao": "Quando o vínculo passa a valer",
+          "unidade": "data",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "transferencia",
+          "campo": "fee_amount",
+          "tipo_bigquery_sugerido": "NUMERIC",
+          "descricao": "Taxa publicada; nulo para valor não divulgado",
+          "unidade": "moeda declarada",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "transferencia",
+          "campo": "fee_currency",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Moeda da taxa publicada",
+          "unidade": "ISO 4217",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "transferencia",
+          "campo": "fee_status",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Confirmed, reported, estimated, undisclosed ou free",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "transferencia",
+          "campo": "add_ons_amount",
+          "tipo_bigquery_sugerido": "NUMERIC",
+          "descricao": "Bônus condicionais separados da parcela fixa",
+          "unidade": "moeda declarada",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "transferencia",
+          "campo": "loan_end_on",
+          "tipo_bigquery_sugerido": "DATE",
+          "descricao": "Fim previsto de empréstimo quando publicado",
+          "unidade": "data",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "transferencia",
+          "campo": "evidence_article_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Notícia/documento que fundamenta esse status",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "valor_mercado": {
+      "nome": "Avaliação de mercado",
+      "granularidade": "Uma estimativa de valor por atleta e data",
+      "chave_logica": [
+        "player_id",
+        "valuation_date",
+        "source_id"
+      ],
+      "campos": [
+        {
+          "entidade": "valor_mercado",
+          "campo": "player_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Atleta avaliado",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "valor_mercado",
+          "campo": "valuation_date",
+          "tipo_bigquery_sugerido": "DATE",
+          "descricao": "Data da avaliação, não da coleta",
+          "unidade": "data",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "valor_mercado",
+          "campo": "amount",
+          "tipo_bigquery_sugerido": "NUMERIC",
+          "descricao": "Valor estimado",
+          "unidade": "moeda declarada",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "valor_mercado",
+          "campo": "currency",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Moeda da estimativa",
+          "unidade": "ISO 4217",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "valor_mercado",
+          "campo": "method",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Comunidade, modelo estatístico ou outra metodologia publicada",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "valor_mercado",
+          "campo": "model_version",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Versão do modelo, se divulgada",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "registro": {
+      "nome": "Registros federativos",
+      "granularidade": "Uma publicação de registro/movimentação",
+      "chave_logica": [
+        "registration_id"
+      ],
+      "campos": [
+        {
+          "entidade": "registro",
+          "campo": "registration_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "ID interno do registro/publicação",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "registro",
+          "campo": "player_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Atleta identificado",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "registro",
+          "campo": "team_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Clube identificado na publicação",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "registro",
+          "campo": "federation",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Entidade responsável",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "registro",
+          "campo": "registration_number",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Número esportivo publicado, quando necessário para conciliação",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "registro",
+          "campo": "registration_type",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Tipo de movimentação exatamente definido na fonte",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "registro",
+          "campo": "publication_date",
+          "tipo_bigquery_sugerido": "DATE",
+          "descricao": "Data do boletim/publicação",
+          "unidade": "data",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "registro",
+          "campo": "effective_on",
+          "tipo_bigquery_sugerido": "DATE",
+          "descricao": "Data de efeito, apenas se explicitada",
+          "unidade": "data",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "registro",
+          "campo": "document_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Referência ao boletim de origem",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "noticia": {
+      "nome": "Notícias e evidências editoriais",
+      "granularidade": "Uma matéria por publicador e URL canônica",
+      "chave_logica": [
+        "article_id"
+      ],
+      "campos": [
+        {
+          "entidade": "noticia",
+          "campo": "article_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "ID interno da matéria",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "noticia",
+          "campo": "canonical_url",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "URL canônica sem rastreadores",
+          "unidade": "URL",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "noticia",
+          "campo": "publisher",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Redação/agência original",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "noticia",
+          "campo": "aggregator",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Serviço que entregou a matéria, se diferente",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "noticia",
+          "campo": "title",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Título autorizado para armazenamento/exibição",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "noticia",
+          "campo": "summary",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Resumo autorizado ou elaborado com proveniência",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "noticia",
+          "campo": "author",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Autoria pública quando informada",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "noticia",
+          "campo": "language",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Idioma do conteúdo",
+          "unidade": "BCP 47",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "noticia",
+          "campo": "published_at",
+          "tipo_bigquery_sugerido": "TIMESTAMP",
+          "descricao": "Hora original da publicação, se conhecida",
+          "unidade": "UTC",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "noticia",
+          "campo": "updated_at",
+          "tipo_bigquery_sugerido": "TIMESTAMP",
+          "descricao": "Hora da revisão editorial, se conhecida",
+          "unidade": "UTC",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "noticia",
+          "campo": "topic",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Match, transfer, injury, finance, disciplinary etc.",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "noticia",
+          "campo": "claim_status",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Reported, rumour, confirmed, denied ou unknown; por alegação quando necessário",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "noticia",
+          "campo": "entity_mentions",
+          "tipo_bigquery_sugerido": "JSON",
+          "descricao": "Menções e vínculos com jogadores/equipes; incluir confiança da resolução",
+          "unidade": "objeto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "noticia",
+          "campo": "story_cluster_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Agrupamento de republicações e matérias sobre o mesmo fato",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "noticia",
+          "campo": "original_source_url",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Link da apuração ou anúncio primário, quando localizado",
+          "unidade": "URL",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "indisponibilidade": {
+      "nome": "Lesões e outras ausências",
+      "granularidade": "Relato de indisponibilidade de jogador com validade temporal",
+      "chave_logica": [
+        "availability_id"
+      ],
+      "campos": [
+        {
+          "entidade": "indisponibilidade",
+          "campo": "availability_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "ID interno da observação",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "indisponibilidade",
+          "campo": "player_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Atleta",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "indisponibilidade",
+          "campo": "team_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Equipe no momento do relato",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "indisponibilidade",
+          "campo": "match_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Partida relacionada, quando específico",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "indisponibilidade",
+          "campo": "reason",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Motivo publicado; não inferir diagnóstico",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "indisponibilidade",
+          "campo": "availability_status",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Out, doubtful, available ou unknown",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "indisponibilidade",
+          "campo": "reported_on",
+          "tipo_bigquery_sugerido": "DATE",
+          "descricao": "Data do boletim/relato",
+          "unidade": "data",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "indisponibilidade",
+          "campo": "expected_return_on",
+          "tipo_bigquery_sugerido": "DATE",
+          "descricao": "Retorno previsto, não garantido",
+          "unidade": "data",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "indisponibilidade",
+          "campo": "confirmed_return_on",
+          "tipo_bigquery_sugerido": "DATE",
+          "descricao": "Retorno confirmado quando observado",
+          "unidade": "data",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "indisponibilidade",
+          "campo": "evidence_article_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Boletim/notícia que fundamenta a informação",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "sancao": {
+      "nome": "Suspensões e decisões disciplinares",
+      "granularidade": "Uma decisão ou revisão publicada",
+      "chave_logica": [
+        "sanction_id"
+      ],
+      "campos": [
+        {
+          "entidade": "sancao",
+          "campo": "sanction_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "ID interno da decisão",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "sancao",
+          "campo": "subject_type",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Player, team, coach ou official",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "sancao",
+          "campo": "subject_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Entidade envolvida",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "sancao",
+          "campo": "competition_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Competição em que vale a decisão, se explícita",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "sancao",
+          "campo": "decision_date",
+          "tipo_bigquery_sugerido": "DATE",
+          "descricao": "Data da decisão",
+          "unidade": "data",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "sancao",
+          "campo": "matches_suspended",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Número de jogos de suspensão informado",
+          "unidade": "jogos",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "sancao",
+          "campo": "status",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Issued, appealed, stayed, served, overturned ou unknown",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "sancao",
+          "campo": "document_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Documento da decisão; não apenas manchete",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "arbitro": {
+      "nome": "Árbitros e nomeações",
+      "granularidade": "Uma nomeação por árbitro, jogo e função",
+      "chave_logica": [
+        "match_id",
+        "referee_id",
+        "role"
+      ],
+      "campos": [
+        {
+          "entidade": "arbitro",
+          "campo": "referee_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "ID interno da pessoa",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "arbitro",
+          "campo": "name",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Nome publicado",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "arbitro",
+          "campo": "country_code",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "País/federação representada quando informado",
+          "unidade": "ISO 3166-1 alpha-2",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "arbitro",
+          "campo": "match_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Partida da nomeação",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "arbitro",
+          "campo": "role",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Main, assistant, fourth, VAR, AVAR etc.",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "arbitro",
+          "campo": "appointment_status",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Appointed, replaced ou confirmed",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "estadio": {
+      "nome": "Estádios e locais",
+      "granularidade": "Um local físico",
+      "chave_logica": [
+        "stadium_id"
+      ],
+      "campos": [
+        {
+          "entidade": "estadio",
+          "campo": "stadium_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "ID interno do local",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "estadio",
+          "campo": "name",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Nome do estádio ou campo",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "estadio",
+          "campo": "city",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Município",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "estadio",
+          "campo": "country_code",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "País",
+          "unidade": "ISO 3166-1 alpha-2",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "estadio",
+          "campo": "latitude",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Latitude do local",
+          "unidade": "graus WGS84",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "estadio",
+          "campo": "longitude",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Longitude do local",
+          "unidade": "graus WGS84",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "estadio",
+          "campo": "timezone",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Fuso geográfico; não apenas deslocamento fixo",
+          "unidade": "IANA",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "estadio",
+          "campo": "capacity",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Capacidade publicada com validade temporal",
+          "unidade": "pessoas",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "estadio",
+          "campo": "surface",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Natural, artificial, hybrid ou unknown",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "estadio",
+          "campo": "altitude_m",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Altitude quando obtida de fonte adequada",
+          "unidade": "m",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "clima": {
+      "nome": "Clima no local de jogo",
+      "granularidade": "Uma variável meteorológica por local, horário e emissão",
+      "chave_logica": [
+        "weather_id"
+      ],
+      "campos": [
+        {
+          "entidade": "clima",
+          "campo": "weather_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "ID interno da amostra",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "clima",
+          "campo": "match_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Partida associada, se houver",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "clima",
+          "campo": "stadium_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Local da consulta",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "clima",
+          "campo": "valid_at",
+          "tipo_bigquery_sugerido": "TIMESTAMP",
+          "descricao": "Horário ao qual a condição se refere",
+          "unidade": "UTC",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "clima",
+          "campo": "issued_at",
+          "tipo_bigquery_sugerido": "TIMESTAMP",
+          "descricao": "Momento de emissão do modelo/previsão quando conhecido",
+          "unidade": "UTC",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "clima",
+          "campo": "data_kind",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Forecast, observation ou reanalysis",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "clima",
+          "campo": "temperature_c",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Temperatura do ar",
+          "unidade": "°C",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "clima",
+          "campo": "humidity_pct",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Umidade relativa",
+          "unidade": "percentual 0–100",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "clima",
+          "campo": "precipitation_mm",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Acumulado no intervalo declarado",
+          "unidade": "mm",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "clima",
+          "campo": "wind_kph",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Velocidade do vento",
+          "unidade": "km/h",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "clima",
+          "campo": "interval_minutes",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Janela temporal da medida/acumulado",
+          "unidade": "minutos",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "bilheteria": {
+      "nome": "Público e borderôs",
+      "granularidade": "Um boletim financeiro de jogo e versão",
+      "chave_logica": [
+        "match_id",
+        "document_id"
+      ],
+      "campos": [
+        {
+          "entidade": "bilheteria",
+          "campo": "match_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Partida",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "bilheteria",
+          "campo": "document_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Boletim financeiro de origem",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "bilheteria",
+          "campo": "paid_attendance",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Público pagante segundo o documento",
+          "unidade": "pessoas",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "bilheteria",
+          "campo": "total_attendance",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Público total segundo o documento",
+          "unidade": "pessoas",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "bilheteria",
+          "campo": "gross_revenue",
+          "tipo_bigquery_sugerido": "NUMERIC",
+          "descricao": "Receita bruta de bilheteria",
+          "unidade": "moeda declarada",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "bilheteria",
+          "campo": "expenses",
+          "tipo_bigquery_sugerido": "NUMERIC",
+          "descricao": "Despesas discriminadas ou total publicadas",
+          "unidade": "moeda declarada",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "bilheteria",
+          "campo": "net_revenue",
+          "tipo_bigquery_sugerido": "NUMERIC",
+          "descricao": "Receita líquida do evento publicada",
+          "unidade": "moeda declarada",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "bilheteria",
+          "campo": "currency",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Moeda do boletim",
+          "unidade": "ISO 4217",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "odd": {
+      "nome": "Cotações",
+      "granularidade": "Uma seleção, mercado, casa e instante",
+      "chave_logica": [
+        "quote_id"
+      ],
+      "campos": [
+        {
+          "entidade": "odd",
+          "campo": "quote_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "ID interno da cotação observada",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "odd",
+          "campo": "match_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Evento esportivo resolvido",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "odd",
+          "campo": "bookmaker",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Casa ou exchange",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "odd",
+          "campo": "market",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "1X2, totals, spread, both_teams_score, player_prop etc.",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "odd",
+          "campo": "period",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "90min, first_half, including_et ou outra definição explícita",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "odd",
+          "campo": "selection",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Home, draw, away, over, under ou seleção do mercado",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "odd",
+          "campo": "line",
+          "tipo_bigquery_sugerido": "NUMERIC",
+          "descricao": "Linha do mercado quando houver, como total 2.5",
+          "unidade": "unidade do mercado",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "odd",
+          "campo": "decimal_odds",
+          "tipo_bigquery_sugerido": "NUMERIC",
+          "descricao": "Cotação convertida ao formato decimal",
+          "unidade": "razão > 1",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "odd",
+          "campo": "quoted_at",
+          "tipo_bigquery_sugerido": "TIMESTAMP",
+          "descricao": "Hora informada pelo fornecedor para a cotação",
+          "unidade": "UTC",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "odd",
+          "campo": "observed_at",
+          "tipo_bigquery_sugerido": "TIMESTAMP",
+          "descricao": "Quando a cotação foi observada pelo nosso sistema",
+          "unidade": "UTC",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "odd",
+          "campo": "is_live",
+          "tipo_bigquery_sugerido": "BOOL",
+          "descricao": "Se cotação foi oferecida durante o jogo",
+          "unidade": "booleano",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "odd",
+          "campo": "side",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Back, lay ou bookmaker",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "odd",
+          "campo": "volume",
+          "tipo_bigquery_sugerido": "NUMERIC",
+          "descricao": "Volume informado, com moeda e definição se houver",
+          "unidade": "moeda declarada",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "rating": {
+      "nome": "Índices de força",
+      "granularidade": "Um índice de equipe/jogador numa data",
+      "chave_logica": [
+        "subject_id",
+        "rating_system",
+        "as_of"
+      ],
+      "campos": [
+        {
+          "entidade": "rating",
+          "campo": "subject_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Equipe ou atleta avaliado",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "rating",
+          "campo": "rating_system",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Elo, SPI, UEFA_coefficient ou outro sistema",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "rating",
+          "campo": "rating_value",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Valor na escala original",
+          "unidade": "escala do modelo",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "rating",
+          "campo": "rank",
+          "tipo_bigquery_sugerido": "INT64",
+          "descricao": "Posição no universo avaliado",
+          "unidade": "ordinal",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "rating",
+          "campo": "as_of",
+          "tipo_bigquery_sugerido": "TIMESTAMP",
+          "descricao": "Momento ao qual o índice se refere",
+          "unidade": "UTC",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "rating",
+          "campo": "model_version",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Metodologia/versão identificável",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "previsao": {
+      "nome": "Previsões esportivas",
+      "granularidade": "Uma previsão por modelo, partida e emissão",
+      "chave_logica": [
+        "match_id",
+        "model_version",
+        "issued_at"
+      ],
+      "campos": [
+        {
+          "entidade": "previsao",
+          "campo": "match_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Partida prevista",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "previsao",
+          "campo": "model_version",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Modelo e versão; distinguir fornecedor e modelo próprio",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "previsao",
+          "campo": "issued_at",
+          "tipo_bigquery_sugerido": "TIMESTAMP",
+          "descricao": "Momento de geração da previsão",
+          "unidade": "UTC",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "previsao",
+          "campo": "prediction_horizon",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Resultado em 90min, classificação ou outro alvo explícito",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "previsao",
+          "campo": "home_win_probability",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Probabilidade de vitória do mandante no alvo escolhido",
+          "unidade": "fração 0–1",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "previsao",
+          "campo": "draw_probability",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Probabilidade de empate; nulo se alvo não admite empate",
+          "unidade": "fração 0–1",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "previsao",
+          "campo": "away_win_probability",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Probabilidade de vitória do visitante no alvo escolhido",
+          "unidade": "fração 0–1",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "previsao",
+          "campo": "expected_home_goals",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Gols esperados pelo modelo antes da partida",
+          "unidade": "gols",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "previsao",
+          "campo": "expected_away_goals",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Gols esperados pelo modelo antes da partida",
+          "unidade": "gols",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "fantasy": {
+      "nome": "Fantasy games",
+      "granularidade": "Atleta, jogo fantasy, temporada e rodada",
+      "chave_logica": [
+        "game_name",
+        "season_id",
+        "round",
+        "player_id"
+      ],
+      "campos": [
+        {
+          "entidade": "fantasy",
+          "campo": "game_name",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "FPL, Cartola ou outro produto",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "fantasy",
+          "campo": "season_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Temporada do fantasy",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "fantasy",
+          "campo": "round",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Rodada/deadline do produto, distinta da rodada física em jogos adiados",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "fantasy",
+          "campo": "player_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Atleta resolvido",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "fantasy",
+          "campo": "fantasy_player_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "ID original do atleta nessa edição do fantasy",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "fantasy",
+          "campo": "price",
+          "tipo_bigquery_sugerido": "NUMERIC",
+          "descricao": "Preço normalizado após verificar escala original",
+          "unidade": "moeda virtual",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "fantasy",
+          "campo": "points",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Pontos segundo as regras vigentes",
+          "unidade": "pontos fantasy",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "fantasy",
+          "campo": "selected_pct",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Porcentagem de escalação, quando publicada",
+          "unidade": "percentual 0–100",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "fantasy",
+          "campo": "status",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Status no jogo fantasy; não diagnóstico clínico",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "fantasy",
+          "campo": "deadline_at",
+          "tipo_bigquery_sugerido": "TIMESTAMP",
+          "descricao": "Fechamento do mercado/escalação",
+          "unidade": "UTC",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "fantasy",
+          "campo": "rules_version",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Edição das regras e pesos de scouts",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "salario": {
+      "nome": "Salários publicados",
+      "granularidade": "Atleta, clube, temporada e fonte da estimativa",
+      "chave_logica": [
+        "player_id",
+        "team_id",
+        "season_id",
+        "source_id"
+      ],
+      "campos": [
+        {
+          "entidade": "salario",
+          "campo": "player_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Atleta",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "salario",
+          "campo": "team_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Clube pagador",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "salario",
+          "campo": "season_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Temporada de referência",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "salario",
+          "campo": "amount",
+          "tipo_bigquery_sugerido": "NUMERIC",
+          "descricao": "Salário divulgado ou estimado",
+          "unidade": "moeda declarada",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "salario",
+          "campo": "currency",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Moeda",
+          "unidade": "ISO 4217",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "salario",
+          "campo": "pay_period",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Weekly, monthly ou annual",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "salario",
+          "campo": "gross_or_net",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Gross, net ou unknown",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "salario",
+          "campo": "includes_bonuses",
+          "tipo_bigquery_sugerido": "BOOL",
+          "descricao": "Se inclui bônus; nulo quando desconhecido",
+          "unidade": "booleano",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "salario",
+          "campo": "estimate_status",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Confirmed, reported, estimated ou unknown",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "financas_clube": {
+      "nome": "Finanças de clubes",
+      "granularidade": "Uma rubrica por clube e período contábil",
+      "chave_logica": [
+        "team_id",
+        "period_end",
+        "metric_name",
+        "source_id"
+      ],
+      "campos": [
+        {
+          "entidade": "financas_clube",
+          "campo": "team_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Clube ou entidade contábil",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "financas_clube",
+          "campo": "period_start",
+          "tipo_bigquery_sugerido": "DATE",
+          "descricao": "Início do período contábil",
+          "unidade": "data",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "financas_clube",
+          "campo": "period_end",
+          "tipo_bigquery_sugerido": "DATE",
+          "descricao": "Fim do período contábil; não presumir temporada esportiva",
+          "unidade": "data",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "financas_clube",
+          "campo": "metric_name",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Revenue, broadcast_revenue, matchday_revenue, commercial_revenue etc.",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "financas_clube",
+          "campo": "amount",
+          "tipo_bigquery_sugerido": "NUMERIC",
+          "descricao": "Valor da rubrica com escala normalizada",
+          "unidade": "moeda declarada",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "financas_clube",
+          "campo": "currency",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Moeda original",
+          "unidade": "ISO 4217",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "financas_clube",
+          "campo": "accounting_scope",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Entidade consolidada, clube, SAF ou outro perímetro",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "financas_clube",
+          "campo": "document_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Relatório de origem e edição",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "relatorio_mercado": {
+      "nome": "Mercado agregado e demografia",
+      "granularidade": "Uma medida por período e recorte de relatório",
+      "chave_logica": [
+        "report_id",
+        "metric_name",
+        "segment"
+      ],
+      "campos": [
+        {
+          "entidade": "relatorio_mercado",
+          "campo": "report_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Relatório de origem",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "relatorio_mercado",
+          "campo": "period_start",
+          "tipo_bigquery_sugerido": "DATE",
+          "descricao": "Início do período analisado",
+          "unidade": "data",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "relatorio_mercado",
+          "campo": "period_end",
+          "tipo_bigquery_sugerido": "DATE",
+          "descricao": "Fim do período analisado",
+          "unidade": "data",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "relatorio_mercado",
+          "campo": "segment",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "País, liga, gênero, faixa etária ou outro recorte explicitado",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "relatorio_mercado",
+          "campo": "metric_name",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Transfer_count, total_fees, average_age etc.",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "relatorio_mercado",
+          "campo": "value",
+          "tipo_bigquery_sugerido": "NUMERIC",
+          "descricao": "Valor reportado",
+          "unidade": "unidade declarada",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "relatorio_mercado",
+          "campo": "unit",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Pessoas, transferências, anos, moeda etc.",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "relatorio_mercado",
+          "campo": "methodology",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Definição do universo e critérios do relatório",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "midia": {
+      "nome": "Fotos, vídeos e metadados",
+      "granularidade": "Um item de mídia",
+      "chave_logica": [
+        "media_id"
+      ],
+      "campos": [
+        {
+          "entidade": "midia",
+          "campo": "media_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "ID interno da mídia",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "midia",
+          "campo": "media_type",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Image, video, audio ou embed",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "midia",
+          "campo": "title",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Título/descrição autorizada",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "midia",
+          "campo": "publisher",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Canal, agência ou autor responsável",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "midia",
+          "campo": "published_at",
+          "tipo_bigquery_sugerido": "TIMESTAMP",
+          "descricao": "Publicação",
+          "unidade": "UTC",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "midia",
+          "campo": "source_page_url",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Página original do item",
+          "unidade": "URL",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "midia",
+          "campo": "embed_url",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Endereço de incorporação quando permitido",
+          "unidade": "URL",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "midia",
+          "campo": "thumbnail_url",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Miniatura com condições de uso próprias",
+          "unidade": "URL",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "midia",
+          "campo": "creator",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Autor/crédito público",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "midia",
+          "campo": "license_name",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Licença específica do item",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "midia",
+          "campo": "attribution_text",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Crédito exigido pelo detentor",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "transmissao": {
+      "nome": "Programação de transmissão",
+      "granularidade": "Jogo, distribuidor e território",
+      "chave_logica": [
+        "match_id",
+        "broadcaster",
+        "territory"
+      ],
+      "campos": [
+        {
+          "entidade": "transmissao",
+          "campo": "match_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Partida",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "transmissao",
+          "campo": "broadcaster",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Canal ou plataforma",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "transmissao",
+          "campo": "territory",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "País/região onde a disponibilidade foi publicada",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "transmissao",
+          "campo": "starts_at",
+          "tipo_bigquery_sugerido": "TIMESTAMP",
+          "descricao": "Início da transmissão, distinto do kickoff",
+          "unidade": "UTC",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "transmissao",
+          "campo": "access_type",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Free, subscription, pay_per_view ou unknown",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "transmissao",
+          "campo": "listing_url",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Página que comprova a grade",
+          "unidade": "URL",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "documento": {
+      "nome": "Documentos e regulamentos",
+      "granularidade": "Um documento e sua versão",
+      "chave_logica": [
+        "document_id",
+        "version"
+      ],
+      "campos": [
+        {
+          "entidade": "documento",
+          "campo": "document_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "ID interno do documento",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "documento",
+          "campo": "document_type",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Match_report, regulation, financial_report, decision etc.",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "documento",
+          "campo": "title",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Título da publicação",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "documento",
+          "campo": "issuer",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Entidade emissora",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "documento",
+          "campo": "published_on",
+          "tipo_bigquery_sugerido": "DATE",
+          "descricao": "Data de publicação",
+          "unidade": "data",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "documento",
+          "campo": "version",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Versão, revisão ou hash do arquivo",
+          "unidade": "texto",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "documento",
+          "campo": "url",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Local de obtenção",
+          "unidade": "URL",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "documento",
+          "campo": "related_entity_ids",
+          "tipo_bigquery_sugerido": "JSON",
+          "descricao": "Jogos, atletas, equipes ou competições relacionados",
+          "unidade": "objeto",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    },
+    "identificador": {
+      "nome": "Conciliação de IDs",
+      "granularidade": "Um vínculo de ID externo a entidade interna",
+      "chave_logica": [
+        "source_id",
+        "entity_type",
+        "external_id"
+      ],
+      "campos": [
+        {
+          "entidade": "identificador",
+          "campo": "source_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Fornecedor dono do identificador externo",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "identificador",
+          "campo": "entity_type",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Player, team, match, competition ou stadium",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "identificador",
+          "campo": "external_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "ID externo preservado como texto",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "identificador",
+          "campo": "internal_id",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "ID canônico do Foota Toota",
+          "unidade": "ID",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "identificador",
+          "campo": "match_method",
+          "tipo_bigquery_sugerido": "STRING",
+          "descricao": "Exact_external_id, manual, composite ou probabilistic",
+          "unidade": "enum",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "identificador",
+          "campo": "match_confidence",
+          "tipo_bigquery_sugerido": "FLOAT64",
+          "descricao": "Confiança interna de conciliação; não probabilidade universal",
+          "unidade": "fração 0–1",
+          "schema": "proposto; nao nativo"
+        },
+        {
+          "entidade": "identificador",
+          "campo": "reviewed",
+          "tipo_bigquery_sugerido": "BOOL",
+          "descricao": "Se o vínculo foi revisado",
+          "unidade": "booleano",
+          "schema": "proposto; nao nativo"
+        }
+      ]
+    }
+  }
+}
