@@ -85,13 +85,27 @@ def novo(titulo: str, kicker: str = "") -> object:
         )
     texto(s, titulo, 0.55, 0.62, 12.2, 0.7, 26, negrito=True)
     rodape = texto(
-        s, "Foota Toota · Trabalho 2 · PDM 2026/2", 0.55, 7.08, 5, 0.3, 9,
+        s,
+        "Foota Toota · Trabalho 2 · PDM 2026/2",
+        0.55,
+        7.08,
+        5,
+        0.3,
+        9,
         cor=CINZA,
     )
     rodape.name = FIXO + "rodapé"
     numero = texto(
-        s, str(len(prs.slides._sldIdLst)), 12.45, 7.02, 0.6, 0.3, 10,
-        cor=VERDE, negrito=True, alinhar=PP_ALIGN.RIGHT,
+        s,
+        str(len(prs.slides._sldIdLst)),
+        12.45,
+        7.02,
+        0.6,
+        0.3,
+        10,
+        cor=VERDE,
+        negrito=True,
+        alinhar=PP_ALIGN.RIGHT,
     )
     numero.name = FIXO + "número"
     return s
@@ -396,7 +410,9 @@ def seta(s, a, b, de=3, para=1, tipo=MSO_CONNECTOR.ELBOW):
 # ---------------------------------------------------------------- 1. capa
 s = prs.slides.add_slide(BRANCO_LAYOUT)
 fundo(s, PASTA_TEMPLATE / "capa.png")
-inst = texto(s, "INSTITUTO DE INFORMÁTICA", 0.44, 0.42, 5, 0.25, 11, negrito=True)
+inst = texto(
+    s, "INSTITUTO DE INFORMÁTICA", 0.44, 0.42, 5, 0.25, 11, negrito=True
+)
 inst.text_frame.add_paragraph()
 r = inst.text_frame.paragraphs[1].add_run()
 r.text = "Universidade Federal de Goiás"
