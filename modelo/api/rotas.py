@@ -9,7 +9,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .config import LIGAS, Config, Liga, agora
 from .features import Features
@@ -18,6 +18,9 @@ from .predicao import predicao
 
 
 log = logging.getLogger("modelo")
+
+# Pedidos por chamada do /predict/lote
+LOTE_MAXIMO = 100
 
 
 class FalhaError(Exception):
@@ -38,8 +41,21 @@ class FalhaError(Exception):
 class Pedido(BaseModel):
     match_id: str
     league_id: str | None = None
+    # Com o evento que originou o pedido, o prediction_id é sempre o mesmo
+    event_id: str | None = None
+    # Código do Football-Data.org (BSA, PL...), quando não vem league_id
+    competition: str | None = None
+    # Para achar a partida pelo confronto quando a gold a guarda com o id de
+    # outra fonte (o replay traz ids fdorg_)
+    season: int | None = None
+    home_team_id: str | None = None
+    away_team_id: str | None = None
     # Features diretas, para simular uma partida: as que faltam viram NaN
     features: dict[str, float | None] | None = None
+
+
+class Lote(BaseModel):
+    pedidos: list[Pedido] = Field(min_length=1, max_length=LOTE_MAXIMO)
 
 
 def criar_app(
@@ -111,12 +127,14 @@ def criar_app(
                     422, "pedido_invalido", "features diretas pedem league_id"
                 )
             return lojas[pedido.league_id].liga, pedido.features
-        candidatas = (
-            [lojas[pedido.league_id]] if pedido.league_id else lojas.values()
-        )
-        for loja in candidatas:
+        evento = {
+            "season": pedido.season,
+            "home_team_id": pedido.home_team_id,
+            "away_team_id": pedido.away_team_id,
+        }
+        for loja in candidatas(pedido):
             try:
-                linha = loja.buscar(pedido.match_id)
+                linha = loja.buscar(pedido.match_id, evento)
             except Exception as erro:
                 log.exception("%s: gold", loja.liga.league_id)
                 raise FalhaError(
@@ -127,6 +145,26 @@ def criar_app(
         raise FalhaError(
             404, "fora_da_gold", f"{pedido.match_id} não está na gold"
         )
+
+    def candidatas(pedido: Pedido) -> list[Features]:
+        """As lojas onde procurar: a do league_id, a da competição ou todas.
+        Competição sem liga aqui é competição sem modelo."""
+        if pedido.league_id:
+            return [lojas[pedido.league_id]]
+        if pedido.competition:
+            achadas = [
+                loja
+                for loja in lojas.values()
+                if loja.liga.competicao == pedido.competition
+            ]
+            if not achadas:
+                raise FalhaError(
+                    409,
+                    "sem_campeao",
+                    f"competição {pedido.competition} sem modelo",
+                )
+            return achadas
+        return list(lojas.values())
 
     def modelo_da(liga: Liga) -> Any:
         try:
@@ -153,7 +191,9 @@ def criar_app(
                 raise FalhaError(
                     503, "features_ausentes", f"a gold não tem {faltam}"
                 )
-        return predicao(liga, modelo, linha, pedido.match_id, None, relogio())
+        return predicao(
+            liga, modelo, linha, pedido.match_id, pedido.event_id, relogio()
+        )
 
     @app.post("/predict")
     def predict(pedido: Pedido) -> dict:
@@ -161,5 +201,27 @@ def criar_app(
             return prever(pedido)
         except FalhaError as falha:
             raise falha.http() from falha
+
+    @app.post("/predict/lote")
+    def predict_lote(lote: Lote) -> dict:
+        """Um resultado por pedido, na ordem; a resposta é sempre 200 e cada
+        item traz o status que o /predict daria."""
+        resultados = []
+        for pedido in lote.pedidos:
+            item = {"match_id": pedido.match_id, "event_id": pedido.event_id}
+            try:
+                item |= {
+                    "status": 200,
+                    "predicao": prever(pedido),
+                    "motivo": None,
+                }
+            except FalhaError as falha:
+                item |= {
+                    "status": falha.status,
+                    "predicao": None,
+                    "motivo": falha.motivo,
+                }
+            resultados.append(item)
+        return {"resultados": resultados}
 
     return app

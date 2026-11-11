@@ -417,3 +417,98 @@ def test_health_mostra_liga_sem_campeao(cliente, fonte):
 
     assert liga["versao"] is None
     assert liga["motivo"] == "sem_campeao"
+
+
+# --- contexto do evento e lote ----------------------------------------------
+
+
+def test_predict_acha_a_partida_pelo_confronto(cliente, fonte):
+    # O returno, já jogado: o evento traz o id fdorg_, a gold guarda fduk_
+    resp = cliente.post(
+        "/predict",
+        json={
+            "match_id": "fdorg_555011",
+            "competition": "BSA",
+            "season": 2026,
+            "home_team_id": "6684",
+            "away_team_id": "4364",
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["match_id"] == "fdorg_555011"
+    home_rest_days = api.FEATURES.index("home_rest_days")
+    assert fonte.estimador.entradas[-1][0][home_rest_days] == 9.0
+
+
+def test_prediction_id_estavel_com_event_id(cliente):
+    pedido = {"match_id": "fdorg_555047", "event_id": "ev-1"}
+
+    a = cliente.post("/predict", json=pedido).json()
+    b = cliente.post("/predict", json=pedido).json()
+
+    assert a["prediction_id"] == b["prediction_id"]
+    assert a["event_id"] == "ev-1"
+
+
+def test_competicao_sem_liga_responde_409(cliente):
+    resp = cliente.post(
+        "/predict", json={"match_id": "x", "competition": "ELC"}
+    )
+
+    assert resp.status_code == 409
+    assert resp.json()["detail"]["motivo"] == "sem_campeao"
+
+
+def test_lote_com_resultados_mistos(cliente):
+    resp = cliente.post(
+        "/predict/lote",
+        json={
+            "pedidos": [
+                {"match_id": "fdorg_555047", "event_id": "ev-1"},
+                {"match_id": "nao_existe"},
+                {"match_id": "x", "competition": "ELC"},
+            ]
+        },
+    )
+
+    assert resp.status_code == 200
+    resultados = resp.json()["resultados"]
+    assert [r["status"] for r in resultados] == [200, 404, 409]
+    assert [r["motivo"] for r in resultados] == [
+        None,
+        "fora_da_gold",
+        "sem_campeao",
+    ]
+    assert resultados[0]["predicao"]["event_id"] == "ev-1"
+    assert resultados[0]["event_id"] == "ev-1"
+    assert resultados[1]["predicao"] is None
+    assert [r["match_id"] for r in resultados] == [
+        "fdorg_555047",
+        "nao_existe",
+        "x",
+    ]
+
+
+def test_lote_acima_de_100_responde_422(cliente):
+    pedidos = [{"match_id": "fdorg_555047"}] * 101
+
+    assert (
+        cliente.post("/predict/lote", json={"pedidos": pedidos}).status_code
+        == 422
+    )
+
+
+def test_lote_le_a_gold_uma_vez_por_liga(fonte):
+    loja = Loja()
+    app = api.criar_app(
+        api.Config(),
+        features={BSA.league_id: loja.features},
+        modelos=api.Modelos(fonte, 600.0),
+    )
+    pedidos = [{"match_id": "fdorg_555047"}] * 50
+
+    resp = TestClient(app).post("/predict/lote", json={"pedidos": pedidos})
+
+    assert {r["status"] for r in resp.json()["resultados"]} == {200}
+    assert loja.leituras == 1
