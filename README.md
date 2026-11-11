@@ -37,22 +37,22 @@ flowchart LR
         COL --> EVT{{"Pub/Sub: eventos"}}
         EVT -->|"assinatura BigQuery"| EBR[("stream.eventos_brutos")]
         EVT -->|"pull"| DFL["Dataflow<br>Apache Beam"]
-        DFL --> SPA[("stream.partidas")]
+        DFL --> SPA[("stream.partidas<br>evento + predição")]
         DFL --> SRJ[("stream.partidas_rejeitadas")]
+        DFL --> SFA[("stream.predicoes_falhas")]
     end
     subgraph ml ["Modelo"]
         TRN["modelo/treinar.py"] --> REG["Vertex AI<br>Model Registry"]
-        REG --> API["API no Cloud Run<br>/predict e /pubsub"]
-        API --> PRD{{"Pub/Sub: predicoes"}}
-        PRD -->|"assinatura BigQuery"| SPR[("stream.predicoes")]
+        REG --> API["API no Cloud Run<br>/predict e /predict/lote"]
     end
     PUB --> TRN
     PUB --> API
-    EVT -->|"push"| API
+    DFL -->|"POST /predict/lote<br>partidas agendadas"| API
     SIL --> UNI["gold.partidas_unificadas"]
     SPA --> UNI
     UNI --> ATU["gold.partidas_atual"]
-    SPR --> AVA["gold.predicoes_avaliadas"]
+    SPA --> PRE["gold.predicoes"]
+    PRE --> AVA["gold.predicoes_avaliadas"]
     SPA --> AVA
 ```
 
@@ -87,18 +87,28 @@ minutos: consulta o Brasileirão no Football-Data.org e publica no tópico
 `replay` reproduz rodadas já jogadas, para demonstrar o fluxo a qualquer
 hora.
 
-Três assinaturas consomem o tópico:
+Duas assinaturas consomem o tópico:
 
 | Assinatura | Tipo | Destino |
 | --- | --- | --- |
 | `eventos-bigquery` | BigQuery | `stream.eventos_brutos`: cada mensagem como chegou, o bronze do stream |
-| `eventos-dataflow` | Pull | Dataflow: valida, limpa e grava em `stream.partidas`; o que for recusado vai para `stream.partidas_rejeitadas` com o motivo |
-| `eventos-api` | Push | `POST /pubsub` da API do modelo, que prevê as partidas agendadas |
+| `eventos-dataflow` | Pull | Dataflow: valida, limpa, prevê as partidas agendadas e grava em `stream.partidas`; o que for recusado vai para `stream.partidas_rejeitadas` com o motivo |
 
 O pipeline do Dataflow (`streaming/pipeline.py`) recusa eventos sem campos
 obrigatórios, com competição ou status desconhecido, com mandante igual ao
 visitante, com placar negativo ou partida encerrada sem placar. Os ids de
 liga e o status saem no mesmo formato da silver.
+
+Para cada partida **ainda não iniciada**, o pipeline chama `POST /predict/lote`
+da API do modelo, em lotes de até 100, e grava o evento já com a predição
+(`prediction_id`, probabilidades, versão do modelo, `predicted_at` e
+`features_ate`). Partidas em andamento ou encerradas seguem sem chamada: são o
+resultado real. A API é privada; os workers mandam um ID token da conta deles,
+que tem `roles/run.invoker` no serviço. Timeout, erro de conexão, 429 e 5xx
+são tentados de novo até 4 vezes, com espera de 1, 2 e 4 s; um 4xx não. A
+partida que fica sem predição chega em `stream.partidas` mesmo assim, e vai
+também para `stream.predicoes_falhas` com o motivo (`sem_campeao`,
+`fora_da_gold`, `timeout`, `nao_autorizado`...).
 
 No BigQuery, três views juntam o histórico do batch com o stream:
 
@@ -106,6 +116,7 @@ No BigQuery, três views juntam o histórico do batch com o stream:
 | --- | --- |
 | `gold.partidas_unificadas` | Partidas da silver (`origem = 'batch'`) e o último estado de cada partida do stream (`origem = 'stream'`), com os mesmos ids de clube |
 | `gold.partidas_atual` | O estado mais recente de cada partida entre batch e stream ao vivo: o que a plataforma lê |
+| `gold.predicoes` | Uma linha por predição, lida de `stream.partidas`, com `kickoff_utc` e a prova de que veio antes do jogo: `prevista_antes_do_jogo` (ao vivo) e `features_antes_do_jogo` (replay) |
 | `gold.predicoes_avaliadas` | Cada predição ao lado do resultado real, quando a partida termina, e se o modelo acertou |
 
 ### Modelo
@@ -136,7 +147,7 @@ reprovado é servido.
   escreve na partição do dia, e as consultas por período leem só as partições
   do intervalo. `silver.matches` é particionada pela data do jogo.
 - **Clusterização pela chave de leitura.** `stream.partidas` é clusterizada
-  por liga e partida, `stream.predicoes` por partida e `silver.matches` por
+  por liga e partida e `silver.matches` por
   liga e clubes: a página de um jogo lê poucos blocos.
 - **Bronze do stream sem código.** A assinatura BigQuery grava toda mensagem
   mesmo com o Dataflow desligado, e a assinatura do Dataflow guarda os eventos
@@ -249,6 +260,12 @@ SELECT model_version, AVG(IF(hit, 1, 0)) AS acerto, COUNT(hit) AS partidas
 FROM gold.predicoes_avaliadas
 WHERE hit IS NOT NULL
 GROUP BY 1;
+
+-- cada predição com o horário do jogo
+SELECT match_id, predicted_at, kickoff_utc, features_ate,
+       prevista_antes_do_jogo, features_antes_do_jogo
+FROM gold.predicoes
+ORDER BY predicted_at DESC;
 ```
 
 ### Treinar e publicar o modelo

@@ -3,6 +3,11 @@
 Roteiro da demonstração do modelo: `/predict` ao vivo, o stream gravando predição x real, e o
 ciclo de MLOps no Vertex AI. Contrato e arquitetura: [`contratos.md`](contratos.md).
 
+> **Roteiro antigo.** Descreve a versão em que o Pub/Sub entregava os eventos à API por push
+> (`eventos-api`) e a API publicava no tópico `predicoes`, num projeto separado. Hoje a API fica
+> no `pdm-bia-505511`, é privada, e quem a chama é o Dataflow, que grava a predição em
+> `stream.partidas` (veja a seção 3 de [`contratos.md`](contratos.md)).
+
 API: `https://modelo-api-3gvoh2dyuq-uc.a.run.app` (Cloud Run `modelo-api`, projeto `pdm-andre-2026`).
 
 ## Antes da demonstração
