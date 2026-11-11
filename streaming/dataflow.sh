@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Liga e desliga o pipeline de streaming (streaming/pipeline.py) no Dataflow.
+# Liga e desliga o pipeline de streaming (streaming/pipeline.py) no Dataflow. Ao ligar,
+# passa a URL da API do modelo (modelo-api) e deixa os workers chamarem a API.
 #
 #   streaming/dataflow.sh iniciar
 #   streaming/dataflow.sh parar     # drena: termina o que já leu e encerra
@@ -24,6 +25,8 @@ STREAM_BUCKET="${STREAM_BUCKET:-foota-toota-505511-stream}"
 STREAM_REGION="${STREAM_REGION:-us-central1}"
 GCLOUD="${GCLOUD_BIN:-gcloud}"
 JOB="foota-toota-partidas"
+MODELO_REGIAO="${MODELO_REGIAO:-us-central1}"
+API="modelo-api"
 # As bibliotecas do Google cobram cota do projeto do ADC local, que pode ser outro
 export GOOGLE_CLOUD_QUOTA_PROJECT="$GCP_PROJECT_ID"
 venv="$root/streaming/.venv"
@@ -43,7 +46,21 @@ case "${1:-}" in
             uv venv "$venv" --python 3.12 --seed
             uv pip install --python "$venv/bin/python" -r "$root/streaming/requirements-pipeline.txt"
         fi
+        # As partidas agendadas são previstas pela API do modelo (Cloud Run
+        # privado): a conta dos workers (a padrão do Compute) pode chamá-la
+        api_url="$("$GCLOUD" run services describe "$API" --region="$MODELO_REGIAO" \
+            --project="$GCP_PROJECT_ID" --format='value(status.url)' 2>/dev/null || true)"
+        if [ -n "$api_url" ]; then
+            numero="$("$GCLOUD" projects describe "$GCP_PROJECT_ID" --format='value(projectNumber)')"
+            "$GCLOUD" run services add-iam-policy-binding "$API" --region="$MODELO_REGIAO" \
+                --member="serviceAccount:$numero-compute@developer.gserviceaccount.com" \
+                --role=roles/run.invoker --project="$GCP_PROJECT_ID" >/dev/null
+            echo "predições pela API: $api_url"
+        else
+            echo "aviso: serviço $API não encontrado; as partidas seguem sem predição" >&2
+        fi
         "$venv/bin/python" "$root/streaming/pipeline.py" \
+            --api_url="$api_url" \
             --runner=DataflowRunner \
             --project="$GCP_PROJECT_ID" \
             --region="$STREAM_REGION" \

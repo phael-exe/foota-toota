@@ -5,6 +5,10 @@ Lê os eventos de partida da assinatura `eventos-dataflow`, valida e limpa cada
 um e grava em stream.partidas. O que não passa na validação, e o que o próprio
 BigQuery recusar, vai para stream.partidas_rejeitadas com o motivo.
 
+As partidas agendadas vão em lote para POST /predict/lote da API do modelo
+(--api_url) e chegam em stream.partidas já com a predição. O que não virou
+predição vai também para stream.predicoes_falhas, com o motivo.
+
   # local, com o DirectRunner
   python streaming/pipeline.py --project=pdm-bia-505511 \\
       --subscription=projects/pdm-bia-505511/subscriptions/eventos-dataflow
@@ -393,6 +397,72 @@ def enviar_http(sessao: Any, url: str, timeout=TIMEOUT_S) -> Enviar:
     return enviar
 
 
+def ramo_predicao(
+    limpas: Any,
+    url: str,
+    enviar_de: Callable[[str], Enviar] | None = None,
+) -> tuple[Any, Any]:
+    """(linhas de stream.partidas, linhas de stream.predicoes_falhas).
+
+    As agendadas vão em lotes para a API; as outras passam com as colunas
+    de predição vazias. Sem `url`, nada é previsto.
+    """
+    import apache_beam as beam
+
+    if not url:
+        partidas = limpas | "Sem predição" >> beam.Map(sem_predicao)
+        falhas = limpas.pipeline | "Sem falhas" >> beam.Create([])
+        return partidas, falhas
+
+    class Prever(beam.DoFn):
+        """Um lote de linhas agendadas -> linhas previstas e falhas. A
+        sessão nasce no worker (setup), com ID token para o Cloud Run."""
+
+        def __init__(self, url: str, enviar_de) -> None:
+            self.url = url
+            self.enviar_de = enviar_de
+            self.enviar = None
+
+        def setup(self) -> None:
+            if self.enviar_de is not None:
+                self.enviar = self.enviar_de(self.url)
+                return
+            from google.auth.transport.requests import (
+                AuthorizedSession,
+                Request,
+            )
+            from google.oauth2 import id_token
+
+            # Audience = URL do serviço; a sessão renova o token sozinha
+            credenciais = id_token.fetch_id_token_credentials(
+                self.url, Request()
+            )
+            self.enviar = enviar_http(AuthorizedSession(credenciais), self.url)
+
+        def process(self, lote):
+            saida, falhas = prever_lote(list(lote), self.enviar, agora())
+            yield from saida
+            for linha in falhas:
+                yield beam.pvalue.TaggedOutput("falhas", linha)
+
+    agendadas, outras = limpas | "Agendada?" >> beam.Partition(
+        lambda linha, _n: 0 if precisa_predicao(linha) else 1, 2
+    )
+    previstas = (
+        agendadas
+        | "Lotes" >> beam.BatchElements(min_batch_size=1, max_batch_size=LOTE)
+        | "Prever"
+        >> beam.ParDo(Prever(url, enviar_de)).with_outputs(
+            "falhas", main="partidas"
+        )
+    )
+    partidas = (
+        previstas.partidas,
+        outras | "Sem predição" >> beam.Map(sem_predicao),
+    ) | "Juntar partidas" >> beam.Flatten()
+    return partidas, previstas.falhas
+
+
 def run(argv: list[str] | None = None) -> None:
     import apache_beam as beam
     from apache_beam.io.gcp.bigquery_tools import RetryStrategy
@@ -409,6 +479,11 @@ def run(argv: list[str] | None = None) -> None:
         help="projects/<projeto>/subscriptions/eventos-dataflow",
     )
     parser.add_argument("--dataset", default="stream")
+    parser.add_argument(
+        "--api_url",
+        default="",
+        help="URL da API do modelo; vazia, as partidas seguem sem predição",
+    )
     args, beam_args = parser.parse_known_args(argv)
 
     options = PipelineOptions(beam_args, streaming=True)
@@ -433,11 +508,11 @@ def run(argv: list[str] | None = None) -> None:
         | "Separar"
         >> beam.Partition(lambda r, _n: 0 if r[0] == LIMPA else 1, 2)
     )
-    resultado = (
-        limpas
-        | "Linha limpa" >> beam.Map(lambda r: r[1])
-        | gravar("partidas", f"{tabela}.partidas")
+    partidas, falhas = ramo_predicao(
+        limpas | "Linha limpa" >> beam.Map(lambda r: r[1]), args.api_url
     )
+    resultado = partidas | gravar("partidas", f"{tabela}.partidas")
+    falhas | gravar("falhas", f"{tabela}.predicoes_falhas")
     recusadas = resultado.failed_rows_with_errors | (
         "Recusadas pelo BigQuery" >> beam.Map(recusada_pelo_bigquery)
     )
