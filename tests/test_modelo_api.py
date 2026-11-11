@@ -341,17 +341,6 @@ def test_predicao_usa_as_features_da_versao(cliente, fonte):
     assert fonte.estimador.entradas[-1] == [[9.0, 1.0]]
 
 
-def test_versao_que_pede_coluna_fora_da_gold_responde_503(cliente, fonte):
-    fonte.features = ("home_rest_days", "coluna_que_nao_existe")
-    fonte.estimador.n_features_in_ = 2
-
-    resp = cliente.post("/predict", json={"match_id": "fdorg_555047"})
-
-    assert resp.status_code == 503
-    assert resp.json()["detail"]["motivo"] == "features_ausentes"
-    assert fonte.estimador.entradas == []
-
-
 def test_predicao_traz_features_ate(fonte):
     ate = datetime(2026, 10, 12, 21, 0, tzinfo=UTC)
     app = api.criar_app(
@@ -512,3 +501,113 @@ def test_lote_le_a_gold_uma_vez_por_liga(fonte):
 
     assert {r["status"] for r in resp.json()["resultados"]} == {200}
     assert loja.leituras == 1
+
+
+# --- revisão final ----------------------------------------------------------
+
+
+def test_lote_isola_erro_inesperado_de_um_pedido(fonte):
+    class Quebra(ModeloFalso):
+        def predict_proba(self, x):
+            if x[0][0] == 9.0:  # só a partida fduk_BRA_x
+                raise ValueError("entrada inválida")
+            return super().predict_proba(x)
+
+    fonte.estimador = Quebra()
+    fonte.features = ("home_rest_days",)
+    fonte.estimador.n_features_in_ = 1
+    app = api.criar_app(
+        api.Config(),
+        features={BSA.league_id: Loja().features},
+        modelos=api.Modelos(fonte, 600.0),
+    )
+
+    resp = TestClient(app).post(
+        "/predict/lote",
+        json={
+            "pedidos": [
+                {"match_id": "fduk_BRA_x"},
+                {"match_id": "fdorg_555047"},
+            ]
+        },
+    )
+
+    assert resp.status_code == 200
+    resultados = resp.json()["resultados"]
+    assert [r["status"] for r in resultados] == [500, 200]
+    assert resultados[0]["motivo"] == "erro_interno"
+
+
+def test_features_ausentes_nao_e_passageiro(cliente, fonte):
+    fonte.features = ("home_rest_days", "coluna_que_nao_existe")
+    fonte.estimador.n_features_in_ = 2
+
+    resp = cliente.post("/predict", json={"match_id": "fdorg_555047"})
+
+    assert resp.status_code == 409
+    assert resp.json()["detail"]["motivo"] == "features_ausentes"
+
+
+def test_sem_campeao_fica_em_cache_ate_a_proxima_conferencia(fonte):
+    class Contadora(FonteFalsa):
+        def __init__(self) -> None:
+            super().__init__()
+            self.consultas = 0
+
+        def versao(self, nome):
+            self.consultas += 1
+            return super().versao(nome)
+
+    contadora = Contadora()
+    contadora.falhar = api.SemCampeaoError("sem alias")
+    relogio = Relogio()
+    modelos = api.Modelos(contadora, 600.0, relogio=relogio)
+
+    for _ in range(5):
+        with pytest.raises(api.SemCampeaoError):
+            modelos.obter(BSA)
+
+    assert contadora.consultas == 1
+    relogio.t = 601
+    contadora.falhar = None
+    assert modelos.obter(BSA).versao == "3"
+
+
+def test_registry_lento_numa_liga_nao_trava_as_outras(fonte):
+    import threading
+
+    epl = api.LIGAS["epl"]
+    liberar = threading.Event()
+    entrou = threading.Event()
+
+    class Lenta(FonteFalsa):
+        travar = False
+
+        def versao(self, nome):
+            if self.travar and nome == BSA.modelo:
+                entrou.set()
+                liberar.wait(5)
+            return super().versao(nome)
+
+    lenta = Lenta()
+    relogio = Relogio()
+    modelos = api.Modelos(lenta, 600.0, relogio=relogio)
+    modelos.obter(BSA)
+    relogio.t = 500
+    modelos.obter(epl)
+    relogio.t = 601  # BSA vencida, EPL ainda válida
+    lenta.travar = True
+    fio = threading.Thread(target=modelos.obter, args=(BSA,))
+    fio.start()
+    entrou.wait(5)
+
+    resultado: list = []
+    outro = threading.Thread(
+        target=lambda: resultado.append(modelos.obter(epl))
+    )
+    outro.start()
+    outro.join(1)
+    liberar.set()
+    fio.join(5)
+
+    assert resultado, "EPL ficou esperando o Registry da BSA"

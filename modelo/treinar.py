@@ -325,7 +325,10 @@ def registrar(
     operacao = resp.json()
     while not operacao.get("done"):
         time.sleep(2)
-        resp = http.get(f"{registry.api}/{operacao['name']}")
+        resp = http.get(
+            f"{registry.api}/{operacao['name']}",
+            timeout=api.REGISTRY_TIMEOUT_S,
+        )
         resp.raise_for_status()
         operacao = resp.json()
     if "error" in operacao:
@@ -374,7 +377,7 @@ def modelo_atual(
             versao, uri = registry.versao(liga.modelo)
             estimador, nomes = registry.carregar(uri)
             return versao, estimador, nomes
-        except api.SemModeloError:
+        except api.SemCampeaoError:
             return None
         except Exception as erro:
             if not tolerar:

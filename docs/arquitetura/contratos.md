@@ -206,16 +206,17 @@ streaming, quem chama é o Dataflow, com a conta dos workers.
 | `season`, `home_team_id`, `away_team_id` | Acham a partida pelo confronto quando a gold a guarda com o id de outra fonte (o replay traz ids `fdorg_`, a gold pode ter `fduk_`) |
 | `features` | Features diretas, para simular uma partida (pede `league_id`); as que faltam viram nulo |
 
-**Erros.** Todo erro traz `{"detail": {"motivo", "mensagem"}}`. Só o `503` é passageiro e vale
-re-tentar:
+**Erros.** Todo erro traz `{"detail": {"motivo", "mensagem"}}` (no lote, `status` e `motivo`
+em cada item). Só o `503` é passageiro e vale re-tentar:
 
 | Status | `motivo` | Quando |
 | --- | --- | --- |
 | 404 | `fora_da_gold` | A partida não está na gold |
 | 409 | `sem_campeao` | A liga não tem versão com alias `campeao`, ou a competição não tem modelo |
+| 409 | `features_ausentes` | O modelo pede uma coluna que a gold não tem: só se resolve com ação de alguém |
 | 422 | `pedido_invalido` | `league_id` desconhecido, features diretas sem liga ou fora da lista do modelo |
-| 503 | `indisponivel` | Gold ou Registry fora do ar |
-| 503 | `features_ausentes` | O modelo pede uma coluna que a gold não tem |
+| 500 | `erro_interno` | Erro inesperado num pedido; no lote, só aquele item |
+| 503 | `indisponivel` | Gold ou Registry fora do ar (chamadas ao Registry com timeout de 30 s) |
 
 **Features** vêm da gold pública (`gs://foota-toota-505511/gold/match_features_<liga>.parquet`),
 relida a cada 10 minutos. `features_ate` é o instante do último dado usado nas features, quando a

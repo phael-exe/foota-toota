@@ -17,6 +17,9 @@ from .config import CLASSES, FEATURES, Config, Liga
 
 log = logging.getLogger("modelo")
 
+# Uma chamada ao Registry que passa disso conta como falha passageira
+REGISTRY_TIMEOUT_S = 30.0
+
 
 class SemModeloError(Exception):
     """A liga não tem modelo utilizável no Registry (ou na pasta local)."""
@@ -84,6 +87,7 @@ class Registry:
         resp = self.http().get(
             f"{self.api}/{self.local}/models",
             params={"filter": f'display_name="{nome}"'},
+            timeout=REGISTRY_TIMEOUT_S,
         )
         resp.raise_for_status()
         encontrados = resp.json().get("models", [])
@@ -91,7 +95,9 @@ class Registry:
 
     def com_alias(self, pai: str, alias: str) -> dict | None:
         """A versão do modelo com o alias, ou None."""
-        resp = self.http().get(f"{self.api}/{pai}@{alias}")
+        resp = self.http().get(
+            f"{self.api}/{pai}@{alias}", timeout=REGISTRY_TIMEOUT_S
+        )
         if resp.status_code in (400, 404):
             return None
         resp.raise_for_status()
@@ -195,6 +201,8 @@ class Modelos:
         self._recarregar_s = recarregar_s
         self._relogio = relogio
         self._trava = threading.Lock()
+        # Uma trava por liga: um Registry lento numa liga não segura as outras
+        self._travas: dict[str, threading.Lock] = {}
         self._atual: dict[str, Modelo] = {}
         self._conferido: dict[str, float] = {}
         self._sem_campeao: set[str] = set()
@@ -206,16 +214,23 @@ class Modelos:
     def sem_campeao(self, liga: Liga) -> bool:
         return liga.modelo in self._sem_campeao
 
-    def obter(self, liga: Liga) -> Modelo:
+    def _trava_da(self, liga: Liga) -> threading.Lock:
         with self._trava:
+            return self._travas.setdefault(liga.modelo, threading.Lock())
+
+    def obter(self, liga: Liga) -> Modelo:
+        with self._trava_da(liga):
             atual = self._atual.get(liga.modelo)
             conferido = self._conferido.get(liga.modelo)
-            if (
-                atual is not None
-                and conferido is not None
+            fresco = (
+                conferido is not None
                 and self._relogio() - conferido < self._recarregar_s
-            ):
+            )
+            if fresco and atual is not None:
                 return atual
+            if fresco and liga.modelo in self._sem_campeao:
+                # A resposta negativa também vale até a próxima conferência
+                raise SemCampeaoError(f"{liga.modelo}: sem versão promovida")
             try:
                 versao, uri = self._fonte.versao(liga.modelo)
                 if atual is None or atual.versao != versao:
@@ -225,6 +240,7 @@ class Modelos:
             except SemCampeaoError:
                 self._atual.pop(liga.modelo, None)
                 self._sem_campeao.add(liga.modelo)
+                self._conferido[liga.modelo] = self._relogio()
                 raise
             except Exception as erro:
                 if atual is None:

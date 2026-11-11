@@ -211,7 +211,8 @@ class Sessao:
                 return resposta() if callable(resposta) else resposta
         return Resposta(status=404)
 
-    def get(self, url, params=None):
+    def get(self, url, params=None, timeout=None):
+        assert timeout is not None, f"GET sem timeout: {url}"
         self.chamadas.append(("GET", url, params))
         return self._responder(url)
 
@@ -329,6 +330,26 @@ def test_registry_sem_o_modelo_nao_tem_campeao():
 
     with pytest.raises(api.SemCampeaoError):
         reg.versao("boosted_tree_epl")
+
+
+def test_modelo_atual_nao_ignora_campeao_com_features_json_quebrado():
+    class Quebrado:
+        def versao(self, nome):
+            return "1", "gs://b/x/"
+
+        def carregar(self, uri):
+            raise api.SemModeloError("features.json precisa ser uma lista")
+
+    with pytest.raises(api.SemModeloError):
+        treinar.modelo_atual(Quebrado())(BSA)
+
+
+def test_modelo_atual_sem_campeao_compara_so_com_os_baselines():
+    class Vazio:
+        def versao(self, nome):
+            raise api.SemCampeaoError("sem alias")
+
+    assert treinar.modelo_atual(Vazio())(BSA) is None
 
 
 # --- Experiments ------------------------------------------------------------

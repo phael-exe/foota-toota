@@ -188,8 +188,10 @@ def criar_app(
             colunas = lojas[liga.league_id].colunas
             faltam = sorted(set(modelo.features) - colunas)
             if faltam:
+                # 409: a versão não casa com a gold até alguém agir;
+                # re-tentar não resolve
                 raise FalhaError(
-                    503, "features_ausentes", f"a gold não tem {faltam}"
+                    409, "features_ausentes", f"a gold não tem {faltam}"
                 )
         return predicao(
             liga, modelo, linha, pedido.match_id, pedido.event_id, relogio()
@@ -220,6 +222,14 @@ def criar_app(
                     "status": falha.status,
                     "predicao": None,
                     "motivo": falha.motivo,
+                }
+            except Exception:
+                # Um pedido quebrado não derruba o lote inteiro
+                log.exception("%s: erro inesperado", pedido.match_id)
+                item |= {
+                    "status": 500,
+                    "predicao": None,
+                    "motivo": "erro_interno",
                 }
             resultados.append(item)
         return {"resultados": resultados}

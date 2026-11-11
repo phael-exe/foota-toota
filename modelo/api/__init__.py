@@ -50,6 +50,7 @@ from .features import (
     ler_parquet,
 )
 from .modelos import (
+    REGISTRY_TIMEOUT_S,
     Fonte,
     Modelo,
     Modelos,
@@ -79,6 +80,7 @@ __all__ = [
     "LIGAS",
     "PIPELINE",
     "RAIZ",
+    "REGISTRY_TIMEOUT_S",
     "Config",
     "Features",
     "Fonte",
