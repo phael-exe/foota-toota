@@ -22,6 +22,11 @@ class SemModeloError(Exception):
     """A liga não tem modelo utilizável no Registry (ou na pasta local)."""
 
 
+class SemCampeaoError(SemModeloError):
+    """Nenhuma versão aprovada: o modelo não existe ou nenhuma versão tem o
+    alias `campeao`. Não é falha passageira: re-tentar não adianta."""
+
+
 @dataclass(frozen=True)
 class Modelo:
     estimador: Any
@@ -95,12 +100,12 @@ class Registry:
     def versao(self, nome: str) -> tuple[str, str]:
         pai = self.modelo_pai(nome)
         if pai is None:
-            raise SemModeloError(f"{nome} não está no Model Registry")
-        for alias in (self._alias, "default"):
-            versao = self.com_alias(pai, alias)
-            if versao is not None:
-                return str(versao["versionId"]), versao["artifactUri"]
-        raise SemModeloError(f"{nome}: nenhuma versão com alias")
+            raise SemCampeaoError(f"{nome} não está no Model Registry")
+        # Só a versão promovida: o alias `default` pode ser uma reprovada
+        versao = self.com_alias(pai, self._alias)
+        if versao is None:
+            raise SemCampeaoError(f"{nome}: nenhuma versão com {self._alias}")
+        return str(versao["versionId"]), versao["artifactUri"]
 
     def carregar(self, uri: str) -> tuple[Any, tuple[str, ...]]:
         import joblib
@@ -144,7 +149,7 @@ class PastaLocal:
     def versao(self, nome: str) -> tuple[str, str]:
         arquivo = self._pasta / nome / "model.joblib"
         if not arquivo.exists():
-            raise SemModeloError(f"{arquivo} não existe")
+            raise SemCampeaoError(f"{arquivo} não existe")
         return f"local-{int(arquivo.stat().st_mtime)}", str(arquivo)
 
     def carregar(self, uri: str) -> tuple[Any, tuple[str, ...]]:
@@ -176,7 +181,8 @@ class Modelos:
     """O modelo de cada liga, com a versão conferida a cada `recarregar_s`.
 
     Promover outra versão no Registry (mover o alias) troca o modelo sem
-    novo deploy. Se o Registry falhar, segue com a versão que já tem.
+    novo deploy. Se o Registry falhar, segue com a versão que já tem; se o
+    alias sumir, para de servir a liga.
     """
 
     def __init__(
@@ -191,10 +197,14 @@ class Modelos:
         self._trava = threading.Lock()
         self._atual: dict[str, Modelo] = {}
         self._conferido: dict[str, float] = {}
+        self._sem_campeao: set[str] = set()
 
     def versao(self, liga: Liga) -> str | None:
         modelo = self._atual.get(liga.modelo)
         return modelo.versao if modelo else None
+
+    def sem_campeao(self, liga: Liga) -> bool:
+        return liga.modelo in self._sem_campeao
 
     def obter(self, liga: Liga) -> Modelo:
         with self._trava:
@@ -212,6 +222,10 @@ class Modelos:
                     estimador, nomes = self._fonte.carregar(uri)
                     atual = Modelo(validar(estimador, nomes), versao, nomes)
                     log.info("%s: versão %s (%s)", liga.modelo, versao, uri)
+            except SemCampeaoError:
+                self._atual.pop(liga.modelo, None)
+                self._sem_campeao.add(liga.modelo)
+                raise
             except Exception as erro:
                 if atual is None:
                     raise SemModeloError(f"{liga.modelo}: {erro}") from erro
@@ -222,6 +236,7 @@ class Modelos:
                     erro,
                 )
             self._atual[liga.modelo] = atual
+            self._sem_campeao.discard(liga.modelo)
             self._conferido[liga.modelo] = self._relogio()
             return atual
 

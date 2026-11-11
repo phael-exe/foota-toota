@@ -311,6 +311,26 @@ def test_modelo_atual_so_tolera_falha_no_modo_sem_registrar():
         treinar.modelo_atual(Quebrado())(BSA)
 
 
+def test_registry_sem_alias_campeao_nao_cai_no_default():
+    reg, _ = registry(
+        {
+            "@campeao": Resposta(status=404),
+            "@default": Resposta({"versionId": "1", "artifactUri": "gs://b/"}),
+            "/models": Resposta({"models": [{"name": PAI}]}),
+        }
+    )
+
+    with pytest.raises(api.SemCampeaoError):
+        reg.versao("boosted_tree_epl")
+
+
+def test_registry_sem_o_modelo_nao_tem_campeao():
+    reg, _ = registry({"/models": Resposta({"models": []})})
+
+    with pytest.raises(api.SemCampeaoError):
+        reg.versao("boosted_tree_epl")
+
+
 # --- Experiments ------------------------------------------------------------
 
 

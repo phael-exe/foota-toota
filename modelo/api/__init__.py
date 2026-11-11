@@ -13,8 +13,9 @@ traz ids `fdorg_` de jogos que a gold guarda com o id de outra fonte, e o
 de-para de clubes sai do bronze público do Football-Data.org.
 
 Modelos: um por liga no Vertex AI Model Registry de MODELO_PROJECT_ID, com o
-display_name da tabela LIGAS. Vale a versão com o alias `campeao` (ou a
-padrão), conferida a cada RECARREGAR_SEGUNDOS. O artefato é o `model.joblib`
+display_name da tabela LIGAS. Vale só a versão com o alias `campeao`
+(sem ele, a liga fica sem predição: `sem_campeao`), conferida a cada
+RECARREGAR_SEGUNDOS. O artefato é o `model.joblib`
 do diretório da versão:
 
   - um estimador scikit-learn com predict_proba e classes_ iguais a
@@ -54,6 +55,7 @@ from .modelos import (
     Modelos,
     PastaLocal,
     Registry,
+    SemCampeaoError,
     SemModeloError,
     fonte_padrao,
     validar,
@@ -86,6 +88,7 @@ __all__ = [
     "PastaLocal",
     "Pedido",
     "Registry",
+    "SemCampeaoError",
     "SemModeloError",
     "agora",
     "ambiente",

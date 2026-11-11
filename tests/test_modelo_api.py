@@ -207,14 +207,6 @@ def test_predict_recusa_pedido_invalido(cliente, pedido):
     assert cliente.post("/predict", json=pedido).status_code == 422
 
 
-def test_predict_liga_sem_modelo_responde_503(cliente, fonte):
-    fonte.falhar = api.SemModeloError("boosted_tree_brasileirao ausente")
-
-    resp = cliente.post("/predict", json={"match_id": "fdorg_555047"})
-
-    assert resp.status_code == 503
-
-
 # --- peças ------------------------------------------------------------------
 
 
@@ -378,3 +370,50 @@ def test_predicao_sem_features_ate_na_gold_devolve_none(cliente):
     resp = cliente.post("/predict", json={"match_id": "fdorg_555047"})
 
     assert resp.json()["features_ate"] is None
+
+
+def test_liga_sem_campeao_responde_409(cliente, fonte):
+    fonte.falhar = api.SemCampeaoError("sem alias campeao")
+
+    resp = cliente.post("/predict", json={"match_id": "fdorg_555047"})
+
+    assert resp.status_code == 409
+    assert resp.json()["detail"]["motivo"] == "sem_campeao"
+
+
+def test_alias_removido_para_de_servir(fonte):
+    relogio = Relogio()
+    modelos = api.Modelos(fonte, 600.0, relogio=relogio)
+    modelos.obter(BSA)
+    fonte.falhar = api.SemCampeaoError("alias removido")
+    relogio.t = 601
+
+    with pytest.raises(api.SemCampeaoError):
+        modelos.obter(BSA)
+    assert modelos.versao(BSA) is None
+
+
+def test_registry_fora_sem_modelo_carregado_responde_503(cliente, fonte):
+    fonte.falhar = RuntimeError("timeout")
+
+    resp = cliente.post("/predict", json={"match_id": "fdorg_555047"})
+
+    assert resp.status_code == 503
+    assert resp.json()["detail"]["motivo"] == "indisponivel"
+
+
+def test_partida_fora_da_gold_responde_404_com_motivo(cliente):
+    resp = cliente.post("/predict", json={"match_id": "nao_existe"})
+
+    assert resp.status_code == 404
+    assert resp.json()["detail"]["motivo"] == "fora_da_gold"
+
+
+def test_health_mostra_liga_sem_campeao(cliente, fonte):
+    fonte.falhar = api.SemCampeaoError("sem alias campeao")
+    cliente.post("/predict", json={"match_id": "fdorg_555047"})
+
+    liga = cliente.get("/health").json()["ligas"]["brasileirao_serie_a"]
+
+    assert liga["versao"] is None
+    assert liga["motivo"] == "sem_campeao"

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.concurrency import run_in_threadpool
@@ -12,11 +13,26 @@ from pydantic import BaseModel
 
 from .config import LIGAS, Config, Liga, agora
 from .features import Features
-from .modelos import Modelos, SemModeloError, fonte_padrao
+from .modelos import Modelos, SemCampeaoError, SemModeloError, fonte_padrao
 from .predicao import predicao
 
 
 log = logging.getLogger("modelo")
+
+
+class FalhaError(Exception):
+    """Um pedido que não vira predição. `motivo` é o que o Dataflow lê para
+    decidir se re-tenta (503) ou registra e segue (404, 409, 422)."""
+
+    def __init__(self, status: int, motivo: str, mensagem: str) -> None:
+        super().__init__(mensagem)
+        self.status = status
+        self.motivo = motivo
+        self.mensagem = mensagem
+
+    def http(self) -> HTTPException:
+        detalhe = {"motivo": self.motivo, "mensagem": self.mensagem}
+        return HTTPException(self.status, detalhe)
 
 
 class Pedido(BaseModel):
@@ -72,6 +88,9 @@ def criar_app(
                 liga_id: {
                     "modelo": loja.liga.modelo,
                     "versao": modelos_.versao(loja.liga),
+                    "motivo": "sem_campeao"
+                    if modelos_.sem_campeao(loja.liga)
+                    else None,
                     "partidas": len(loja),
                     "features_lidas_em": loja.lido_em,
                 }
@@ -81,12 +100,16 @@ def criar_app(
 
     def localizar(pedido: Pedido) -> tuple[Liga, dict]:
         if pedido.league_id is not None and pedido.league_id not in lojas:
-            raise HTTPException(
-                422, f"league_id desconhecido; use um de {sorted(lojas)}"
+            raise FalhaError(
+                422,
+                "pedido_invalido",
+                f"league_id desconhecido; use um de {sorted(lojas)}",
             )
         if pedido.features is not None:
             if pedido.league_id is None:
-                raise HTTPException(422, "features diretas pedem league_id")
+                raise FalhaError(
+                    422, "pedido_invalido", "features diretas pedem league_id"
+                )
             return lojas[pedido.league_id].liga, pedido.features
         candidatas = (
             [lojas[pedido.league_id]] if pedido.league_id else lojas.values()
@@ -96,34 +119,47 @@ def criar_app(
                 linha = loja.buscar(pedido.match_id)
             except Exception as erro:
                 log.exception("%s: gold", loja.liga.league_id)
-                raise HTTPException(503, "gold indisponível") from erro
+                raise FalhaError(
+                    503, "indisponivel", "gold indisponível"
+                ) from erro
             if linha is not None:
                 return loja.liga, linha
-        raise HTTPException(404, f"{pedido.match_id} não está na gold")
+        raise FalhaError(
+            404, "fora_da_gold", f"{pedido.match_id} não está na gold"
+        )
 
-    @app.post("/predict")
-    def predict(pedido: Pedido) -> dict:
-        liga, linha = localizar(pedido)
+    def modelo_da(liga: Liga) -> Any:
         try:
-            modelo = modelos_.obter(liga)
+            return modelos_.obter(liga)
+        except SemCampeaoError as erro:
+            raise FalhaError(409, "sem_campeao", str(erro)) from erro
         except SemModeloError as erro:
-            raise HTTPException(503, str(erro)) from erro
+            raise FalhaError(503, "indisponivel", str(erro)) from erro
+
+    def prever(pedido: Pedido) -> dict:
+        """A predição do pedido, ou FalhaError."""
+        liga, linha = localizar(pedido)
+        modelo = modelo_da(liga)
         if pedido.features is not None:
             sobra = sorted(set(pedido.features) - set(modelo.features))
             if sobra:
-                raise HTTPException(422, f"features desconhecidas: {sobra}")
+                raise FalhaError(
+                    422, "pedido_invalido", f"features desconhecidas: {sobra}"
+                )
         else:
-            faltam = sorted(
-                set(modelo.features) - lojas[liga.league_id].colunas
-            )
+            colunas = lojas[liga.league_id].colunas
+            faltam = sorted(set(modelo.features) - colunas)
             if faltam:
-                raise HTTPException(
-                    503,
-                    {
-                        "motivo": "features_ausentes",
-                        "mensagem": f"a gold não tem {faltam}",
-                    },
+                raise FalhaError(
+                    503, "features_ausentes", f"a gold não tem {faltam}"
                 )
         return predicao(liga, modelo, linha, pedido.match_id, None, relogio())
+
+    @app.post("/predict")
+    def predict(pedido: Pedido) -> dict:
+        try:
+            return prever(pedido)
+        except FalhaError as falha:
+            raise falha.http() from falha
 
     return app
