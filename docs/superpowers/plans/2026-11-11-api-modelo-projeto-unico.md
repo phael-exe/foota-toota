@@ -188,6 +188,7 @@ def test_predicao_usa_as_features_da_versao(cliente, fonte):
     assert r.status_code == 200
     assert fonte.estimador.entradas[-1] == [[9.0, 1.0]]
 
+
 def test_versao_que_pede_coluna_fora_da_gold_responde_503(cliente, fonte):
     fonte.features = ("home_rest_days", "coluna_que_nao_existe")
     fonte.estimador.n_features_in_ = 2
@@ -196,12 +197,19 @@ def test_versao_que_pede_coluna_fora_da_gold_responde_503(cliente, fonte):
     assert r.status_code == 503
     assert r.json()["detail"]["motivo"] == "features_ausentes"
 
+
 def test_predicao_traz_features_ate(fonte):
     ...  # gold com features_ate = datetime(2026, 10, 12, 21, 0, tzinfo=UTC)
     assert r.json()["features_ate"] == "2026-10-12T21:00:00Z"
 
+
 def test_predicao_sem_features_ate_na_gold_devolve_none(cliente):
-    assert cliente.post("/predict", json={"match_id": "fdorg_555047"}).json()["features_ate"] is None
+    assert (
+        cliente.post("/predict", json={"match_id": "fdorg_555047"}).json()[
+            "features_ate"
+        ]
+        is None
+    )
 ```
 
 - `FonteFalsa.carregar` devolve `(self.estimador, self.features)`, com padrão `api.FEATURES`.
@@ -273,6 +281,7 @@ def test_liga_sem_campeao_responde_409(cliente, fonte):
     assert r.status_code == 409
     assert r.json()["detail"]["motivo"] == "sem_campeao"
 
+
 def test_alias_removido_para_de_servir(fonte):
     relogio = Relogio()
     modelos = api.Modelos(fonte, 600.0, relogio=relogio)
@@ -282,15 +291,18 @@ def test_alias_removido_para_de_servir(fonte):
     with pytest.raises(api.SemCampeaoError):
         modelos.obter(BSA)
 
+
 def test_registry_fora_sem_modelo_carregado_responde_503(cliente, fonte):
     fonte.falhar = RuntimeError("timeout")
     r = cliente.post("/predict", json={"match_id": "fdorg_555047"})
     assert r.status_code == 503
     assert r.json()["detail"]["motivo"] == "indisponivel"
 
+
 def test_partida_fora_da_gold_responde_404_com_motivo(cliente):
     r = cliente.post("/predict", json={"match_id": "nao_existe"})
     assert r.json()["detail"]["motivo"] == "fora_da_gold"
+
 
 def test_registry_sem_alias_campeao_nao_cai_no_default():
     ...  # sessão falsa: GET @campeao -> 404, GET @default -> 200
