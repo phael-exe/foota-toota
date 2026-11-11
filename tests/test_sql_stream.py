@@ -56,3 +56,35 @@ def test_views_criadas_depois_do_que_leem():
     assert "features_antes_do_jogo" in texto
     avaliadas_sql = (SQL / "11_create_view_predicoes_avaliadas.sql").read_text()
     assert "gold.predicoes`" in avaliadas_sql
+
+
+def test_run_sh_cria_a_tabela_antes_do_alter_em_qualquer_locale(tmp_path):
+    import os
+    import subprocess
+
+    bq = tmp_path / "bq"
+    bq.write_text("#!/bin/sh\ncat >/dev/null\n")
+    bq.chmod(0o755)
+    env = {
+        **os.environ,
+        "LANG": "en_US.UTF-8",
+        "LC_ALL": "",
+        "GCP_PROJECT_ID": "p",
+        "GCS_BUCKET": "b",
+        "BQ_BIN": str(bq),
+    }
+    saida = subprocess.run(
+        [str(RAIZ / "sql" / "run.sh"), str(SQL)],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    ordem = [
+        linha[4:] for linha in saida.splitlines() if linha.startswith("=== ")
+    ]
+    criar = next(
+        i for i, n in enumerate(ordem) if "03_create_table_partidas" in n
+    )
+    alterar = next(i for i, n in enumerate(ordem) if "03a_alter" in n)
+    assert criar < alterar

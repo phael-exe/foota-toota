@@ -33,13 +33,14 @@ if [ "$#" -eq 0 ]; then
     exit 2
 fi
 
-# Expand folder arguments into the .sql files they hold, sorted by name.
+# Expand folder arguments into the .sql files they hold, sorted by name byte by byte (LC_ALL=C:
+# other locales skip the underscore, and 03a_ would run before 03_).
 scripts=()
 for arg in "$@"; do
     if [ -d "$arg" ]; then
         while IFS= read -r file; do
             scripts+=("$file")
-        done < <(find "$arg" -maxdepth 1 -name '*.sql' | sort)
+        done < <(find "$arg" -maxdepth 1 -name '*.sql' | LC_ALL=C sort)
     else
         scripts+=("$arg")
     fi

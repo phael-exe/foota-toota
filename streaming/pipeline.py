@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -71,6 +72,8 @@ OBRIGATORIOS = (
 )
 
 LIMPA, REJEITADA = "limpa", "rejeitada"
+
+log = logging.getLogger("pipeline")
 
 
 class RejeicaoError(ValueError):
@@ -324,7 +327,16 @@ def prever_lote(
     for tentativa in range(1, tentativas + 1):
         if tentativa > 1:
             dormir(espera_s * 2 ** (tentativa - 2))
-        status, corpo = enviar([pedido(linhas[i]) for i in pendentes])
+        try:
+            status, corpo = enviar([pedido(linhas[i]) for i in pendentes])
+        except Exception as erro:
+            # Um erro que o cliente não esperava não pode segurar as
+            # partidas: o Dataflow re-tentaria o lote para sempre
+            log.exception("predição: erro no cliente: %s", erro)
+            for i in pendentes:
+                desistir(i, None, "erro_cliente", tentativa)
+            pendentes = []
+            break
         if status in PASSAGEIROS:
             motivo = _motivo_do_lote(status, corpo)
             ultimo = dict.fromkeys(pendentes, (status, motivo))
@@ -350,8 +362,12 @@ def prever_lote(
             motivo = (res.get("motivo") if isinstance(res, dict) else None) or (
                 f"http_{st}"
             )
-            if st == 200 and isinstance(res.get("predicao"), dict):
-                saida[i] = enriquecer(linhas[i], res["predicao"])
+            if st == 200:
+                linha = _prevista(linhas[i], res.get("predicao"))
+                if linha is None:
+                    desistir(i, 200, "resposta_invalida", tentativa)
+                else:
+                    saida[i] = linha
             elif st in PASSAGEIROS:
                 restantes.append(i)
                 ultimo[i] = (st, motivo)
@@ -368,9 +384,21 @@ def prever_lote(
     return saida, falhas
 
 
+def _prevista(linha: dict, predicao: Any) -> dict | None:
+    """A linha com a predição, ou None se a predição veio malformada (sem
+    prediction_id, ou com data que não dá para ler)."""
+    if not isinstance(predicao, dict) or not predicao.get("prediction_id"):
+        return None
+    try:
+        return enriquecer(linha, predicao)
+    except RejeicaoError:
+        return None
+
+
 def enviar_http(sessao: Any, url: str, timeout=TIMEOUT_S) -> Enviar:
     """POST {url}/predict/lote pela sessão (autenticada no Dataflow)."""
     import requests
+    from google.auth.exceptions import GoogleAuthError
 
     destino = url.rstrip("/") + "/predict/lote"
 
@@ -381,8 +409,12 @@ def enviar_http(sessao: Any, url: str, timeout=TIMEOUT_S) -> Enviar:
             )
         except requests.Timeout:
             return 0, {"motivo": "timeout"}
-        except requests.ConnectionError:
+        except requests.RequestException:
+            # Conexão recusada ou cortada no meio da resposta
             return 0, {"motivo": "conexao"}
+        except GoogleAuthError:
+            # O ID token não veio do metadata server
+            return 0, {"motivo": "token"}
         try:
             corpo = resp.json()
         except ValueError:

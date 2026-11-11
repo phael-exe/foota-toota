@@ -418,3 +418,49 @@ def test_enviar_http_manda_o_lote_e_traduz_timeout():
         SessaoHttp(requests.ConnectionError()), "https://api"
     )
     assert fora([]) == (0, {"motivo": "conexao"})
+
+
+def test_enviar_http_traduz_outros_erros_de_rede_e_de_token():
+    import requests
+    from google.auth.exceptions import RefreshError
+
+    partido = SessaoHttp(requests.exceptions.ChunkedEncodingError())
+    assert pipeline.enviar_http(partido, "https://api")([]) == (
+        0,
+        {"motivo": "conexao"},
+    )
+    sem_token = SessaoHttp(RefreshError("metadata"))
+    assert pipeline.enviar_http(sem_token, "https://api")([]) == (
+        0,
+        {"motivo": "token"},
+    )
+
+
+@pytest.mark.parametrize(
+    "predicao",
+    [
+        None,
+        "texto",
+        predicao_api("e1", prediction_id=None),
+        predicao_api("e1", predicted_at="ontem"),
+    ],
+)
+def test_item_200_malformado_vira_resposta_invalida(predicao):
+    api = Api((200, {"resultados": [item(200, "e1", predicao)]}))
+    saida, falhas = pipeline.prever_lote(
+        [linha_agendada(event_id="e1")], api, AGORA, dormir=sem_espera
+    )
+    assert saida[0]["prediction_id"] is None
+    assert falhas[0]["motivo"] == "resposta_invalida"
+
+
+def test_erro_inesperado_do_cliente_nao_segura_as_partidas():
+    def quebra(_pedidos):
+        raise ValueError("url inválida")
+
+    saida, falhas = pipeline.prever_lote(
+        [linha_agendada(event_id="e1")], quebra, AGORA, dormir=sem_espera
+    )
+    assert saida[0]["event_id"] == "e1"
+    assert saida[0]["prediction_id"] is None
+    assert falhas[0]["motivo"] == "erro_cliente"

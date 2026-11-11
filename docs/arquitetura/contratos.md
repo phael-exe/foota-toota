@@ -149,9 +149,11 @@ HTTP, `motivo`, `tentativas`, `processed_at`). Motivos:
 | Motivo | De onde vem |
 | --- | --- |
 | `sem_campeao`, `fora_da_gold`, `features_ausentes`, `pedido_invalido`, `indisponivel`, `erro_interno` | Da API (seção 4) |
-| `timeout`, `conexao` | Do cliente: a API não respondeu (`status` nulo) |
+| `timeout`, `conexao` | Do cliente: a API não respondeu ou cortou a resposta (`status` nulo) |
+| `token` | O worker não conseguiu o ID token (`status` nulo) |
+| `erro_cliente` | Erro inesperado no próprio pipeline ao chamar a API, ex. `--api_url` inválida (`status` nulo) |
 | `nao_autorizado` | 401 ou 403: falta `run.invoker` para a conta dos workers |
-| `resposta_invalida` | A API respondeu 200 num formato inesperado |
+| `resposta_invalida` | A API respondeu 200 num formato inesperado (sem `resultados`, item sem `prediction_id`, data ilegível) |
 | `http_<status>` | Outro status sem motivo no corpo |
 
 **Leitura:** `gold.predicoes` tem uma linha por `prediction_id` (o evento reentregue pelo Pub/Sub
