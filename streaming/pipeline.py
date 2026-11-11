@@ -323,7 +323,7 @@ def prever_lote(
         status, corpo = enviar([pedido(linhas[i]) for i in pendentes])
         if status in PASSAGEIROS:
             motivo = _motivo_do_lote(status, corpo)
-            ultimo = {i: (status, motivo) for i in pendentes}
+            ultimo = dict.fromkeys(pendentes, (status, motivo))
             continue
         if status != 200:
             for i in pendentes:
