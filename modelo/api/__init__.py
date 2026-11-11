@@ -19,7 +19,9 @@ do diretório da versão:
 
   - um estimador scikit-learn com predict_proba e classes_ iguais a
     {"home", "draw", "away"} (os rótulos de silver.matches.outcome);
-  - entrada = array posicional na ordem de FEATURES, NaN onde falta dado;
+  - entrada = array posicional na ordem do `features.json` da versão (sem
+    ele, a de FEATURES), NaN onde falta dado; toda feature da lista precisa
+    existir na gold;
   - treinado com o scikit-learn de modelo/requirements.txt.
 
 Sem o Registry, MODELOS_DIR aponta uma pasta com <display_name>/model.joblib.
@@ -31,7 +33,6 @@ from __future__ import annotations
 
 from .config import (
     CLASSES,
-    COLUNAS,
     DADOS,
     FEATURES,
     LIGAS,
@@ -71,7 +72,6 @@ from .rotas import (
 
 __all__ = [
     "CLASSES",
-    "COLUNAS",
     "DADOS",
     "FEATURES",
     "LIGAS",

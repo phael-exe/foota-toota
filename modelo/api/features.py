@@ -9,7 +9,7 @@ import threading
 import time
 from collections.abc import Callable
 
-from .config import COLUNAS, Liga, agora
+from .config import Liga, agora
 
 
 log = logging.getLogger("modelo")
@@ -23,7 +23,8 @@ def baixar_publico(url: str) -> bytes:
     return resp.content
 
 
-def ler_parquet(dados: bytes, colunas: list[str]) -> list[dict]:
+def ler_parquet(dados: bytes, colunas: list[str] | None) -> list[dict]:
+    """As linhas do parquet; com `colunas` None, todas as colunas."""
     import pyarrow.parquet as pq
 
     return pq.read_table(io.BytesIO(dados), columns=colunas).to_pylist()
@@ -43,7 +44,7 @@ class Features:
         dados_url: str,
         recarregar_s: float,
         baixar: Callable[[str], bytes] = baixar_publico,
-        ler: Callable[[bytes, list[str]], list[dict]] = ler_parquet,
+        ler: Callable[[bytes, list[str] | None], list[dict]] = ler_parquet,
         relogio: Callable[[], float] = time.monotonic,
     ) -> None:
         self.liga = liga
@@ -58,6 +59,8 @@ class Features:
         self._clubes: dict[str, str] = {}
         self._lido_em: float | None = None
         self.lido_em: str | None = None
+        # As colunas da gold: o que uma versão de modelo pode pedir
+        self.colunas: frozenset[str] = frozenset()
 
     def __len__(self) -> int:
         return len(self._por_id)
@@ -89,7 +92,8 @@ class Features:
         ):
             return
         url = f"{self._url}/{self.liga.gold}"
-        linhas = self._ler(self._baixar(url), COLUNAS)
+        linhas = self._ler(self._baixar(url), None)
+        self.colunas = frozenset(linhas[0]) if linhas else frozenset()
         self._por_id = {linha["match_id"]: linha for linha in linhas}
         self._por_confronto = {
             (linha["season"], linha["home_team_id"], linha["away_team_id"]): (

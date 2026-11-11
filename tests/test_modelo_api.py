@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -32,6 +33,7 @@ CAMPOS = {
     "prob_away",
     "predicted_outcome",
     "predicted_at",
+    "features_ate",
 }
 
 
@@ -87,6 +89,7 @@ class FonteFalsa:
     def __init__(self) -> None:
         self.versao_atual = "3"
         self.estimador = ModeloFalso()
+        self.features = api.FEATURES
         self.cargas = 0
         self.falhar: Exception | None = None
 
@@ -97,7 +100,7 @@ class FonteFalsa:
 
     def carregar(self, uri: str):
         self.cargas += 1
-        return self.estimador
+        return self.estimador, self.features
 
 
 class Loja:
@@ -334,3 +337,44 @@ def test_rota_pubsub_nao_existe_mais(cliente):
 
 def test_pacote_nao_cria_app_ao_importar():
     assert not hasattr(api, "app")
+
+
+def test_predicao_usa_as_features_da_versao(cliente, fonte):
+    fonte.features = ("home_rest_days", "away_rest_days")
+    fonte.estimador.n_features_in_ = 2
+
+    resp = cliente.post("/predict", json={"match_id": "fduk_BRA_x"})
+
+    assert resp.status_code == 200
+    assert fonte.estimador.entradas[-1] == [[9.0, 1.0]]
+
+
+def test_versao_que_pede_coluna_fora_da_gold_responde_503(cliente, fonte):
+    fonte.features = ("home_rest_days", "coluna_que_nao_existe")
+    fonte.estimador.n_features_in_ = 2
+
+    resp = cliente.post("/predict", json={"match_id": "fdorg_555047"})
+
+    assert resp.status_code == 503
+    assert resp.json()["detail"]["motivo"] == "features_ausentes"
+    assert fonte.estimador.entradas == []
+
+
+def test_predicao_traz_features_ate(fonte):
+    ate = datetime(2026, 10, 12, 21, 0, tzinfo=UTC)
+    app = api.criar_app(
+        api.Config(),
+        features={BSA.league_id: Loja([linha(features_ate=ate)]).features},
+        modelos=api.Modelos(fonte, 600.0),
+        relogio=lambda: AGORA,
+    )
+
+    resp = TestClient(app).post("/predict", json={"match_id": "fdorg_555047"})
+
+    assert resp.json()["features_ate"] == "2026-10-12T21:00:00Z"
+
+
+def test_predicao_sem_features_ate_na_gold_devolve_none(cliente):
+    resp = cliente.post("/predict", json={"match_id": "fdorg_555047"})
+
+    assert resp.json()["features_ate"] is None

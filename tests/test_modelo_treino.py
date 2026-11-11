@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import math
 import random
 import sys
@@ -129,7 +130,7 @@ def test_decidir(modelo, campeao, reprovacoes):
 
 def test_treinar_liga_aprova_modelo_que_bate_baselines_e_campeao():
     estimador, relatorio = treinar.treinar_liga(
-        BSA, GOLD, lambda liga: ("1", Uniforme()), **BUSCA
+        BSA, GOLD, lambda liga: ("1", Uniforme(), api.FEATURES), **BUSCA
     )
 
     assert api.validar(estimador) is estimador
@@ -145,12 +146,40 @@ def test_treinar_liga_reprova_quem_nao_bate_o_campeao():
     campeao, _ = treinar.treinar_liga(BSA, GOLD, lambda liga: None, **BUSCA)
 
     _, relatorio = treinar.treinar_liga(
-        BSA, GOLD, lambda liga: ("4", campeao), **BUSCA
+        BSA, GOLD, lambda liga: ("4", campeao, api.FEATURES), **BUSCA
     )
 
     # O mesmo modelo empata com o campeão: empate não promove
     assert not relatorio["aprovado"]
     assert "campeão" in relatorio["motivos"][0]
+
+
+def test_campeao_e_avaliado_com_as_features_dele():
+    class DuasFeatures(Uniforme):
+        def __init__(self) -> None:
+            self.larguras: list = []
+
+        def predict_proba(self, x):
+            self.larguras += [len(linha) for linha in x]
+            return super().predict_proba(x)
+
+    campeao = DuasFeatures()
+    nomes = ("home_rest_days", "away_rest_days")
+
+    treinar.treinar_liga(BSA, GOLD, lambda liga: ("1", campeao, nomes), **BUSCA)
+
+    assert campeao.larguras and set(campeao.larguras) == {2}
+
+
+def test_artefatos_levam_a_lista_de_features():
+    estimador, relatorio = treinar.treinar_liga(
+        BSA, GOLD, lambda liga: None, **BUSCA
+    )
+
+    arquivos = treinar.artefatos(estimador, relatorio)
+
+    assert json.loads(arquivos["features.json"]) == list(api.FEATURES)
+    assert {"model.joblib", "metricas.json"} <= set(arquivos)
 
 
 # --- Registry ---------------------------------------------------------------
@@ -289,7 +318,9 @@ def _relatorio(campeao: bool = True) -> dict:
     _, relatorio = treinar.treinar_liga(
         BSA,
         GOLD,
-        (lambda liga: ("1", Uniforme())) if campeao else (lambda liga: None),
+        (lambda liga: ("1", Uniforme(), api.FEATURES))
+        if campeao
+        else (lambda liga: None),
         **BUSCA,
     )
     relatorio["execucao"] = "20261019t051751z"

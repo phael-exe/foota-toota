@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
-from .config import FEATURES, LIGAS, Config, Liga, agora
+from .config import LIGAS, Config, Liga, agora
 from .features import Features
 from .modelos import Modelos, SemModeloError, fonte_padrao
 from .predicao import predicao
@@ -87,9 +87,6 @@ def criar_app(
         if pedido.features is not None:
             if pedido.league_id is None:
                 raise HTTPException(422, "features diretas pedem league_id")
-            sobra = sorted(set(pedido.features) - set(FEATURES))
-            if sobra:
-                raise HTTPException(422, f"features desconhecidas: {sobra}")
             return lojas[pedido.league_id].liga, pedido.features
         candidatas = (
             [lojas[pedido.league_id]] if pedido.league_id else lojas.values()
@@ -111,6 +108,22 @@ def criar_app(
             modelo = modelos_.obter(liga)
         except SemModeloError as erro:
             raise HTTPException(503, str(erro)) from erro
+        if pedido.features is not None:
+            sobra = sorted(set(pedido.features) - set(modelo.features))
+            if sobra:
+                raise HTTPException(422, f"features desconhecidas: {sobra}")
+        else:
+            faltam = sorted(
+                set(modelo.features) - lojas[liga.league_id].colunas
+            )
+            if faltam:
+                raise HTTPException(
+                    503,
+                    {
+                        "motivo": "features_ausentes",
+                        "mensagem": f"a gold não tem {faltam}",
+                    },
+                )
         return predicao(liga, modelo, linha, pedido.match_id, None, relogio())
 
     return app

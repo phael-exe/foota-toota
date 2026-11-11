@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import io
+import json
 import logging
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -25,6 +26,7 @@ class SemModeloError(Exception):
 class Modelo:
     estimador: Any
     versao: str
+    features: tuple[str, ...] = FEATURES
 
 
 class Fonte(Protocol):
@@ -32,7 +34,22 @@ class Fonte(Protocol):
         """(version_id, uri do artefato) da versão que vale agora."""
         ...
 
-    def carregar(self, uri: str) -> Any: ...
+    def carregar(self, uri: str) -> tuple[Any, tuple[str, ...]]:
+        """(estimador, features que ele recebe, em ordem)."""
+        ...
+
+
+def ler_features(conteudo: bytes | None) -> tuple[str, ...]:
+    """A lista do features.json; sem o arquivo (versões anteriores a ele),
+    as FEATURES fixas."""
+    if conteudo is None:
+        return FEATURES
+    nomes = json.loads(conteudo)
+    if not isinstance(nomes, list) or not all(
+        isinstance(n, str) for n in nomes
+    ):
+        raise SemModeloError("features.json precisa ser uma lista de nomes")
+    return tuple(nomes)
 
 
 class Registry:
@@ -85,14 +102,25 @@ class Registry:
                 return str(versao["versionId"]), versao["artifactUri"]
         raise SemModeloError(f"{nome}: nenhuma versão com alias")
 
-    def carregar(self, uri: str) -> Any:
+    def carregar(self, uri: str) -> tuple[Any, tuple[str, ...]]:
         import joblib
         from google.cloud import storage
 
         bucket, _, pasta = uri.removeprefix("gs://").partition("/")
-        caminho = "/".join(p for p in (pasta.strip("/"), "model.joblib") if p)
-        blob = storage.Client(project=self.projeto).bucket(bucket).blob(caminho)
-        return joblib.load(io.BytesIO(blob.download_as_bytes()))
+        destino = storage.Client(project=self.projeto).bucket(bucket)
+
+        def blob(nome: str) -> Any:
+            return destino.blob(
+                "/".join(p for p in (pasta.strip("/"), nome) if p)
+            )
+
+        estimador = joblib.load(
+            io.BytesIO(blob("model.joblib").download_as_bytes())
+        )
+        lista = blob("features.json")
+        return estimador, ler_features(
+            lista.download_as_bytes() if lista.exists() else None
+        )
 
     def http(self) -> Any:
         """Sessão autenticada com as credenciais padrão (ADC)."""
@@ -119,13 +147,16 @@ class PastaLocal:
             raise SemModeloError(f"{arquivo} não existe")
         return f"local-{int(arquivo.stat().st_mtime)}", str(arquivo)
 
-    def carregar(self, uri: str) -> Any:
+    def carregar(self, uri: str) -> tuple[Any, tuple[str, ...]]:
         import joblib
 
-        return joblib.load(uri)
+        lista = Path(uri).with_name("features.json")
+        return joblib.load(uri), ler_features(
+            lista.read_bytes() if lista.exists() else None
+        )
 
 
-def validar(estimador: Any) -> Any:
+def validar(estimador: Any, features: Sequence[str] = FEATURES) -> Any:
     """Recusa na carga o que o /predict não conseguiria usar."""
     classes = {str(c) for c in getattr(estimador, "classes_", ())}
     if not hasattr(estimador, "predict_proba") or classes != set(CLASSES):
@@ -133,10 +164,10 @@ def validar(estimador: Any) -> Any:
             f"o modelo precisa de predict_proba e classes_ {CLASSES}, "
             f"tem {sorted(classes)}"
         )
-    esperadas = getattr(estimador, "n_features_in_", len(FEATURES))
-    if esperadas != len(FEATURES):
+    esperadas = getattr(estimador, "n_features_in_", len(features))
+    if esperadas != len(features):
         raise SemModeloError(
-            f"o modelo espera {esperadas} features, a API manda {len(FEATURES)}"
+            f"o modelo espera {esperadas} features, a lista tem {len(features)}"
         )
     return estimador
 
@@ -178,7 +209,8 @@ class Modelos:
             try:
                 versao, uri = self._fonte.versao(liga.modelo)
                 if atual is None or atual.versao != versao:
-                    atual = Modelo(validar(self._fonte.carregar(uri)), versao)
+                    estimador, nomes = self._fonte.carregar(uri)
+                    atual = Modelo(validar(estimador, nomes), versao, nomes)
                     log.info("%s: versão %s (%s)", liga.modelo, versao, uri)
             except Exception as erro:
                 if atual is None:

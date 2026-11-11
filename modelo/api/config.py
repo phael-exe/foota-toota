@@ -36,16 +36,6 @@ FEATURES = (
     "diff_avg_points_season",
 )
 
-COLUNAS = [
-    "match_id",
-    "league_id",
-    "season",
-    "home_team_id",
-    "away_team_id",
-    "has_full_history",
-    *FEATURES,
-]
-
 
 @dataclass(frozen=True)
 class Liga:
