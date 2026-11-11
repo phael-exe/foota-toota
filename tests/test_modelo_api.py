@@ -1,8 +1,7 @@
-"""API do modelo (modelo/api.py)."""
+"""API do modelo (modelo/api/)."""
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import sys
 from pathlib import Path
@@ -14,16 +13,9 @@ from fastapi.testclient import TestClient
 MODELO = Path(__file__).resolve().parent.parent / "modelo"
 
 
-def _modulo(nome: str):
-    spec = importlib.util.spec_from_file_location(nome, MODELO / f"{nome}.py")
-    assert spec is not None and spec.loader is not None
-    modulo = importlib.util.module_from_spec(spec)
-    sys.modules[nome] = modulo
-    spec.loader.exec_module(modulo)
-    return modulo
+sys.path.insert(0, str(MODELO))
+import api  # noqa: E402
 
-
-api = _modulo("api")
 
 AGORA = "2026-10-16T13:15:02Z"
 BSA = api.LIGAS["brasileirao_serie_a"]
@@ -338,3 +330,7 @@ def test_inicio_sobe_mesmo_sem_modelo(fonte):
 
 def test_rota_pubsub_nao_existe_mais(cliente):
     assert cliente.post("/pubsub", json={}).status_code == 404
+
+
+def test_pacote_nao_cria_app_ao_importar():
+    assert not hasattr(api, "app")

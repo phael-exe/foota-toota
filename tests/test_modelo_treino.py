@@ -23,7 +23,10 @@ def _modulo(nome: str):
     return modulo
 
 
-api = _modulo("api")
+sys.path.insert(0, str(MODELO))
+import api  # noqa: E402
+
+
 treinar = _modulo("treinar")
 
 BSA = api.LIGAS["brasileirao_serie_a"]

@@ -7,7 +7,7 @@ ENV PYTHONUNBUFFERED=1
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY api.py .
+COPY api/ ./api/
 
 # O Cloud Run informa a porta em $PORT
-CMD exec uvicorn api:app --host 0.0.0.0 --port "${PORT:-8080}"
+CMD exec uvicorn api.main:app --host 0.0.0.0 --port "${PORT:-8080}"
