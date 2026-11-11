@@ -196,3 +196,225 @@ def test_evento_invalido_vai_para_rejeitadas(mensagem_, motivo):
     assert motivo in linha["reason"]
     assert linha["payload"] == mensagem_.decode()
     assert linha["processed_at"] == AGORA
+
+
+# --- inferência -------------------------------------------------------------
+
+
+def linha_agendada(**campos):
+    _, linha = pipeline.limpar(
+        mensagem(status="TIMED", score_home=None, score_away=None), AGORA
+    )
+    return {**linha, **campos}
+
+
+def predicao_api(event_id="e1", **campos):
+    return {
+        "prediction_id": "p-" + event_id,
+        "event_id": event_id,
+        "match_id": "fdorg_555023",
+        "league_id": "brasileirao_serie_a",
+        "model_name": "boosted_tree_brasileirao",
+        "model_version": "1",
+        "prob_home": 0.5,
+        "prob_draw": 0.3,
+        "prob_away": 0.2,
+        "predicted_outcome": "home",
+        "predicted_at": "2026-10-16T12:00:01Z",
+        "features_ate": "2026-10-01T00:00:00Z",
+        **campos,
+    }
+
+
+def item(status, ev, predicao=None, motivo=None):
+    return {
+        "match_id": "fdorg_555023",
+        "event_id": ev,
+        "status": status,
+        "predicao": predicao,
+        "motivo": motivo,
+    }
+
+
+class Api:
+    """Responde em ordem as respostas dadas e guarda os pedidos."""
+
+    def __init__(self, *respostas):
+        self.respostas, self.chamadas = list(respostas), []
+
+    def __call__(self, pedidos):
+        self.chamadas.append(pedidos)
+        return self.respostas.pop(0)
+
+
+def sem_espera(_segundos):
+    pass
+
+
+def test_so_partida_agendada_pede_predicao():
+    assert pipeline.precisa_predicao(linha_agendada())
+    assert not pipeline.precisa_predicao(linha_agendada(status="finished"))
+    assert not pipeline.precisa_predicao(linha_agendada(status="in_play"))
+
+
+def test_pedido_leva_o_confronto_e_o_codigo_da_competicao():
+    p = pipeline.pedido(linha_agendada(event_id="e1"))
+    assert p == {
+        "match_id": "fdorg_555023",
+        "event_id": "e1",
+        "competition": "BSA",
+        "season": 2026,
+        "home_team_id": "1771",
+        "away_team_id": "1776",
+    }
+
+
+def test_lote_previsto_volta_enriquecido_e_sem_falha():
+    linhas = [linha_agendada(event_id="e1"), linha_agendada(event_id="e2")]
+    api = Api(
+        (
+            200,
+            {
+                "resultados": [
+                    item(200, "e1", predicao_api("e1")),
+                    item(200, "e2", predicao_api("e2")),
+                ]
+            },
+        )
+    )
+    saida, falhas = pipeline.prever_lote(linhas, api, AGORA, dormir=sem_espera)
+    assert falhas == []
+    assert [linha["prediction_id"] for linha in saida] == ["p-e1", "p-e2"]
+    assert saida[0]["predicted_outcome"] == "home"
+    assert saida[0]["features_ate"] == "2026-10-01T00:00:00+00:00"
+    assert saida[0]["status"] == "scheduled"
+
+
+def test_4xx_de_um_item_vira_falha_sem_nova_tentativa():
+    linhas = [linha_agendada(event_id="e1"), linha_agendada(event_id="e2")]
+    api = Api(
+        (
+            200,
+            {
+                "resultados": [
+                    item(200, "e1", predicao_api("e1")),
+                    item(409, "e2", motivo="sem_campeao"),
+                ]
+            },
+        )
+    )
+    saida, falhas = pipeline.prever_lote(linhas, api, AGORA, dormir=sem_espera)
+    assert len(api.chamadas) == 1
+    assert saida[1]["prediction_id"] is None
+    assert set(pipeline.COLUNAS_PREDICAO) <= set(saida[1])
+    assert falhas == [
+        {
+            "event_id": "e2",
+            "match_id": "fdorg_555023",
+            "league_id": "brasileirao_serie_a",
+            "status": 409,
+            "motivo": "sem_campeao",
+            "tentativas": 1,
+            "processed_at": AGORA,
+        }
+    ]
+
+
+def test_item_503_tenta_de_novo_so_ele_com_backoff():
+    linhas = [linha_agendada(event_id="e1"), linha_agendada(event_id="e2")]
+    esperas = []
+    api = Api(
+        (
+            200,
+            {
+                "resultados": [
+                    item(200, "e1", predicao_api("e1")),
+                    item(503, "e2", motivo="indisponivel"),
+                ]
+            },
+        ),
+        (200, {"resultados": [item(200, "e2", predicao_api("e2"))]}),
+    )
+    saida, falhas = pipeline.prever_lote(
+        linhas, api, AGORA, dormir=esperas.append
+    )
+    assert [len(c) for c in api.chamadas] == [2, 1]
+    assert api.chamadas[1][0]["event_id"] == "e2"
+    assert esperas == [1.0]
+    assert falhas == []
+    assert saida[1]["prediction_id"] == "p-e2"
+
+
+def test_timeout_esgota_as_tentativas_e_vira_falha():
+    esperas = []
+    api = Api(*[(0, {"motivo": "timeout"})] * 4)
+    saida, falhas = pipeline.prever_lote(
+        [linha_agendada(event_id="e1")], api, AGORA, dormir=esperas.append
+    )
+    assert esperas == [1.0, 2.0, 4.0]
+    assert saida[0]["prediction_id"] is None
+    assert falhas[0]["status"] is None
+    assert falhas[0]["motivo"] == "timeout"
+    assert falhas[0]["tentativas"] == 4
+
+
+@pytest.mark.parametrize(
+    ("status", "motivo"),
+    [(401, "nao_autorizado"), (403, "nao_autorizado"), (422, "http_422")],
+)
+def test_lote_4xx_falha_tudo_sem_nova_tentativa(status, motivo):
+    api = Api((status, None))
+    saida, falhas = pipeline.prever_lote(
+        [linha_agendada(event_id="e1")], api, AGORA, dormir=sem_espera
+    )
+    assert len(api.chamadas) == 1
+    assert len(saida) == 1
+    assert falhas[0]["motivo"] == motivo
+    assert falhas[0]["status"] == status
+
+
+@pytest.mark.parametrize("corpo", [None, {}, {"resultados": []}])
+def test_resposta_malformada_vira_falha_e_a_linha_segue(corpo):
+    api = Api((200, corpo))
+    saida, falhas = pipeline.prever_lote(
+        [linha_agendada(event_id="e1")], api, AGORA, dormir=sem_espera
+    )
+    assert len(api.chamadas) == 1
+    assert saida[0]["event_id"] == "e1"
+    assert saida[0]["prediction_id"] is None
+    assert falhas[0]["motivo"] == "resposta_invalida"
+
+
+class SessaoHttp:
+    def __init__(self, erro=None):
+        self.erro, self.posts = erro, []
+
+    def post(self, url, json, timeout):
+        self.posts.append((url, json, timeout))
+        if self.erro:
+            raise self.erro
+
+        class Resposta:
+            status_code = 200
+
+            def json(self):
+                return {"resultados": []}
+
+        return Resposta()
+
+
+def test_enviar_http_manda_o_lote_e_traduz_timeout():
+    import requests
+
+    s = SessaoHttp()
+    enviar = pipeline.enviar_http(s, "https://api")
+    assert enviar([{"match_id": "m"}]) == (200, {"resultados": []})
+    assert s.posts == [
+        ("https://api/predict/lote", {"pedidos": [{"match_id": "m"}]}, (5, 60))
+    ]
+    lento = pipeline.enviar_http(SessaoHttp(requests.Timeout()), "https://api")
+    assert lento([]) == (0, {"motivo": "timeout"})
+    fora = pipeline.enviar_http(
+        SessaoHttp(requests.ConnectionError()), "https://api"
+    )
+    assert fora([]) == (0, {"motivo": "conexao"})
