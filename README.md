@@ -13,8 +13,8 @@ API REST no Cloud Run.
 [![Ruff][ruff-badge]][ruff]
 [![pre-commit][pre-commit-badge]][pre-commit]
 
-**API do modelo em produção:** <https://modelo-api-3gvoh2dyuq-uc.a.run.app>
-([como chamar](#api-do-modelo))
+**API do modelo em produção:** <https://modelo-api-6rohqft3pa-uc.a.run.app> (privada,
+[como chamar](#api-do-modelo))
 
 ## Arquitetura
 
@@ -119,10 +119,15 @@ loss e o modelo em produção. A versão aprovada é registrada no Vertex AI
 Model Registry com o alias `campeao`, e cada execução, aprovada ou não, vira
 um run no Vertex AI Experiments.
 
-A API (`modelo/api.py`, FastAPI) carrega a versão `campeao` de cada liga e
+Tudo mora no projeto `pdm-bia-505511`: Registry, Experiments, bucket dos
+artefatos (`gs://pdm-bia-505511-modelos`) e a API. Cada versão guarda, ao lado
+do `model.joblib`, um `features.json` com as features que ela recebe, em
+ordem: um candidato com outras features entra sem mudar a API.
+
+A API (pacote `modelo/api/`, FastAPI) carrega a versão `campeao` de cada liga e
 confere a cada 10 minutos se ela mudou, então trocar o modelo não exige novo
-deploy. As predições são publicadas no tópico `predicoes`, que uma
-assinatura BigQuery grava em `stream.predicoes`.
+deploy. Uma liga sem versão `campeao` fica sem predição: nenhum modelo
+reprovado é servido.
 
 ### Escolhas técnicas
 
@@ -256,53 +261,52 @@ uv run --no-project --with-requirements modelo/requirements-treino.txt \
 # build da imagem (modelo/Dockerfile) e deploy no Cloud Run
 modelo/deploy_api.sh
 
-# liga a API ao stream: push dos eventos e permissão de publicar predições
-EVENTOS_PUSH_URL=<url da API>/pubsub MODELO_SA=<conta de serviço da API> \
-    streaming/infra.sh
 ```
 
-O `deploy_api.sh` imprime no fim a URL do `/pubsub` e a conta de serviço que
-vão no último comando.
+O serviço é privado: quem chama precisa de `roles/run.invoker` e de um ID
+token.
 
 ### API do modelo
 
 | Rota | O que faz |
 | --- | --- |
 | `POST /predict` | Recebe o `match_id` de uma partida (ou as features, para simular) e devolve as probabilidades de vitória do mandante, empate e vitória do visitante |
-| `POST /pubsub` | Recebe o push da assinatura `eventos-api`, prevê as partidas agendadas e publica em `predicoes` |
+| `POST /predict/lote` | Até 100 pedidos numa chamada, um resultado por pedido com o status de cada um |
 | `GET /health` | Versão do modelo e partidas carregadas de cada liga |
 
 ```bash
-curl -s https://modelo-api-3gvoh2dyuq-uc.a.run.app/health
+TOKEN=$(gcloud auth print-identity-token)
 
-curl -s -X POST https://modelo-api-3gvoh2dyuq-uc.a.run.app/predict \
-  -H 'Content-Type: application/json' \
-  -d '{"match_id": "fdorg_555052"}'
+curl -s -H "Authorization: Bearer $TOKEN" https://modelo-api-6rohqft3pa-uc.a.run.app/health
+
+curl -s -X POST https://modelo-api-6rohqft3pa-uc.a.run.app/predict \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"match_id": "fdorg_555095"}'
 ```
 
 ```json
 {
-  "prediction_id": "0836e337-f90e-4482-8d09-787fb92e8a1c",
+  "prediction_id": "e9408307-341e-59e3-a69f-74d446f11b5f",
   "event_id": null,
-  "match_id": "fdorg_555052",
+  "match_id": "fdorg_555095",
   "league_id": "brasileirao_serie_a",
   "model_name": "boosted_tree_brasileirao",
   "model_version": "1",
-  "prob_home": 0.6325,
-  "prob_draw": 0.1909,
-  "prob_away": 0.1766,
-  "predicted_outcome": "home",
-  "predicted_at": "2026-10-26T18:46:54Z"
+  "prob_home": 0.2861,
+  "prob_draw": 0.1943,
+  "prob_away": 0.5196,
+  "predicted_outcome": "away",
+  "predicted_at": "2026-11-11T19:18:59Z",
+  "features_ate": null
 }
 ```
 
-Para simular uma partida, envie as features e `"publicar": false`, que não
-publica a predição no tópico:
+Para simular uma partida, envie as features:
 
 ```bash
-curl -s -X POST https://modelo-api-3gvoh2dyuq-uc.a.run.app/predict \
-  -H 'Content-Type: application/json' \
-  -d '{"match_id": "simulada", "league_id": "brasileirao_serie_a", "publicar": false,
+curl -s -X POST https://modelo-api-6rohqft3pa-uc.a.run.app/predict \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"match_id": "simulada", "league_id": "brasileirao_serie_a",
        "features": {"home_avg_points_season": 2.3, "away_avg_points_season": 0.8,
                     "diff_avg_points_season": 1.5}}'
 ```

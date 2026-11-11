@@ -8,7 +8,7 @@ mudar, muda primeiro aqui.
 | Quem | Responsável por |
 | --- | --- |
 | Raphael | coletor, tópicos e assinaturas, Dataflow, tabelas `stream.*` e views da gold |
-| André | modelo no Vertex AI Model Registry e API no Cloud Run (`/predict` e `/pubsub`) |
+| André | modelo no Vertex AI Model Registry e API no Cloud Run (`/predict` e `/predict/lote`) |
 | Wagner | plataforma: recebe as predições por push e lê o histórico no BigQuery |
 
 ## 1. Onde fica cada coisa
@@ -183,59 +183,55 @@ Exemplo (o formato foi validado no ar em 16/10 com uma mensagem de teste):
 Os rótulos `home`, `draw` e `away` são os mesmos de `silver.matches.outcome`, o que permite a
 `gold.predicoes_avaliadas` comparar predição e resultado sem tradução.
 
-## 4. API do modelo (André)
+## 4. API do modelo
 
-Um serviço Cloud Run com duas rotas, as duas chamando a mesma função de predição:
+Um serviço Cloud Run (`modelo-api`, pacote `modelo/api/`) no `pdm-bia-505511`, **privado**:
+quem chama precisa de `roles/run.invoker` e de `Authorization: Bearer <ID token>`. No
+streaming, quem chama é o Dataflow, com a conta dos workers.
 
-| Rota | Quem chama | Entrada | Saída |
-| --- | --- | --- | --- |
-| `POST /predict` | curl/Postman na demo | JSON com os dados da partida | A predição, no formato da seção 3, em JSON |
-| `POST /pubsub` | Push da assinatura `eventos-api` | Envelope da seção 2 | 204; publica a predição em `predicoes` |
+| Rota | Entrada | Saída |
+| --- | --- | --- |
+| `POST /predict` | Um pedido (abaixo) | A predição, no formato da seção 3, mais `features_ate` |
+| `POST /predict/lote` | `{"pedidos": [...]}`, de 1 a 100 pedidos | Sempre 200: `{"resultados": [{"match_id", "event_id", "status", "predicao", "motivo"}]}`, na ordem dos pedidos |
+| `GET /health` | | Versão de cada modelo, `motivo` (`sem_campeao` quando não há versão aprovada), partidas carregadas |
 
-Sugestão para a entrada do `/predict`: aceitar `{"match_id": "fdorg_555047"}` e buscar as features
-em `gold.match_features` (as partidas agendadas do Brasileirão estão lá com `split_set = 'PREDICT'`
-e o mesmo `match_id` dos eventos), ou receber as features diretamente. A escolha é do André; o
-formato da **saída** é o da seção 3, para o `/predict` e o tópico falarem a mesma língua.
+**Pedido.** Só `match_id` é obrigatório.
 
-**Dados de treino**, um arquivo por liga, com as features da gold e três rótulos
-(`label_outcome`, `label_goals_home`, `label_goals_away`):
-`https://storage.googleapis.com/foota-toota-505511/gold/match_training_brasileirao.parquet` e
-`.../gold/match_training_epl.parquet`. Use `split_set` (`TRAIN`, `EVAL`, `TEST`, `PREDICT`); as
-linhas `PREDICT` são os jogos a prever, sem rótulo. Os gols são só rótulo, nunca feature.
+| Campo | Para quê |
+| --- | --- |
+| `match_id` | A partida; procurada na gold de cada liga |
+| `league_id` | Restringe a uma liga (id da silver) |
+| `competition` | Código do Football-Data.org (`BSA`, `PL`...), quando não vem `league_id` |
+| `event_id` | O evento que originou o pedido: com ele o `prediction_id` é determinístico (mesmo evento e mesma versão, mesmo id), então um retry não duplica predição |
+| `season`, `home_team_id`, `away_team_id` | Acham a partida pelo confronto quando a gold a guarda com o id de outra fonte (o replay traz ids `fdorg_`, a gold pode ter `fduk_`) |
+| `features` | Features diretas, para simular uma partida (pede `league_id`); as que faltam viram nulo |
 
-**Como ficou (`modelo/api.py`):**
+**Erros.** Todo erro traz `{"detail": {"motivo", "mensagem"}}`. Só o `503` é passageiro e vale
+re-tentar:
 
-- `POST /predict` recebe `{"match_id": "fdorg_555047"}` e acha a liga sozinho; `league_id` é
-  opcional. Para simular uma partida, `{"match_id": "...", "league_id": "epl", "features": {...}}`
-  usa as features enviadas (as que faltam viram nulo). A predição também é publicada em
-  `predicoes`, com `event_id` nulo, a não ser com `"publicar": false`.
-- As features vêm da gold pública (`gs://foota-toota-505511/gold/match_features_<liga>.parquet`),
-  relida a cada 10 minutos. Não precisa de acesso ao BigQuery do pipeline.
-- `POST /pubsub` acha a partida pelo `match_id` e, se não achar, pelo confronto (temporada,
-  mandante e visitante). O replay traz ids `fdorg_` de jogos que a gold guarda com outro id
-  (`fduk_...`); o de-para de clubes sai de `bronze/football_data_org/competition=BSA/matches.jsonl`.
-  A predição publicada leva sempre o `match_id` do evento.
-- `prediction_id` é o mesmo para o mesmo `event_id` e a mesma versão do modelo, então uma
-  reentrega do Pub/Sub repete o id em vez de criar outro.
-- `GET /health` mostra a versão de cada modelo e quantas partidas cada liga tem carregadas.
-- Predição x real: a tabela `pdm-andre-2026.modelo.predicoes_vs_real` (`modelo/sql/`) tem uma
-  linha por `match_id`, o mesmo antes e depois do jogo. O `/pubsub` grava a predição quando chega um
-  evento agendado e o placar quando chega o `FINISHED`, em qualquer ordem (MERGE), e `hit` diz se o
-  modelo acertou. A view `modelo.acerto_por_versao` resume acerto, log loss e o "sempre mandante"
-  por versão e modo (live/replay). Fica no projeto do André, ao lado dos modelos; a
-  `gold.predicoes_avaliadas` do pipeline continua sendo a visão por predição. Roteiro da demo:
-  [`demo-modelo.md`](demo-modelo.md).
-- O modelo de cada liga é a versão com alias `campeao` no Vertex AI Model Registry do projeto do
-  André (sem o alias, a versão padrão). Mover o alias troca o modelo em até 10 minutos, sem deploy.
-- `modelo/treinar.py` treina os dois modelos (scikit-learn, árvores com boosting) sobre a mesma gold
-  pública: hiperparâmetros escolhidos em EVAL, retreino em TRAIN + EVAL, medida em TEST. Uma versão
-  só ganha o alias `campeao` se bater, em TEST, o "sempre mandante" (acurácia), as frequências do
-  treino (log loss) e o campeão atual, reavaliado nas mesmas partidas. O `metricas.json` fica ao
-  lado do `model.joblib` no bucket, e cada execução (aprovada ou não) vira um run no Vertex AI
-  Experiments `foota-toota-resultado`, com hiperparâmetros, métricas de TEST e a decisão.
+| Status | `motivo` | Quando |
+| --- | --- | --- |
+| 404 | `fora_da_gold` | A partida não está na gold |
+| 409 | `sem_campeao` | A liga não tem versão com alias `campeao`, ou a competição não tem modelo |
+| 422 | `pedido_invalido` | `league_id` desconhecido, features diretas sem liga ou fora da lista do modelo |
+| 503 | `indisponivel` | Gold ou Registry fora do ar |
+| 503 | `features_ausentes` | O modelo pede uma coluna que a gold não tem |
 
-Para publicar em `predicoes` de outro projeto, a conta de serviço do Cloud Run precisa de
-`roles/pubsub.publisher` no tópico. O Raphael concede (`MODELO_SA=<email> streaming/infra.sh`).
+**Features** vêm da gold pública (`gs://foota-toota-505511/gold/match_features_<liga>.parquet`),
+relida a cada 10 minutos. `features_ate` é o instante do último dado usado nas features, quando a
+gold traz a coluna; sem ela, `null`.
+
+**Modelos.** O de cada liga é a versão com alias `campeao` no Vertex AI Model Registry do
+`pdm-bia-505511`; mover o alias troca o modelo em até 10 minutos, sem deploy, e tirá-lo deixa a
+liga sem predição. Cada versão é um diretório em `gs://pdm-bia-505511-modelos/` com
+`model.joblib`, `features.json` (a lista ordenada de features que o modelo recebe) e
+`metricas.json`.
+
+**Treino** (`modelo/treinar.py`): hiperparâmetros escolhidos em EVAL, retreino em TRAIN + EVAL,
+medida em TEST. Uma versão só ganha o alias `campeao` se bater, em TEST, o "sempre mandante"
+(acurácia), as frequências do treino (log loss) e o campeão atual, reavaliado nas mesmas partidas
+com as features dele. Empate não promove. Cada execução, aprovada ou não, vira um run no Vertex AI
+Experiments `foota-toota-resultado`.
 
 ## 5. Plataforma (Wagner)
 

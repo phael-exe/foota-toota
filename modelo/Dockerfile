@@ -1,4 +1,4 @@
-# Imagem da API do modelo (Cloud Run modelo-api): /predict, /pubsub e /health.
+# Imagem da API do modelo (Cloud Run modelo-api): /predict, /predict/lote e /health.
 FROM python:3.12-slim
 
 WORKDIR /app
