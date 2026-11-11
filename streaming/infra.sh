@@ -6,18 +6,18 @@
 #
 #   API do Dataflow e bucket privado gs://$STREAM_BUCKET (estado do coletor, temporários do Dataflow)
 #   dataset stream, tabelas e views (sql/10_stream)
-#   tópicos eventos, predicoes e predicoes-dlq
+#   tópicos eventos, predicoes e predicoes-dlq (predicoes é histórico: o Dataflow chama a API
+#   do modelo e grava a predição em stream.partidas)
 #   assinaturas:
-#     eventos-dataflow      pull, lida pelo pipeline (streaming/pipeline.py)
+#     eventos-dataflow      pull, lida pelo pipeline (streaming/pipeline.py), que prevê as
+#                           partidas agendadas pela API do modelo
 #     eventos-bigquery      grava cada evento bruto em stream.eventos_brutos, sem código
 #     predicoes-bigquery    grava cada predição em stream.predicoes; após 5 falhas vai para predicoes-dlq
 #     predicoes-dlq-sub     pull, para ver as predições que o BigQuery recusou
-#     eventos-api           push para a API do modelo, se EVENTOS_PUSH_URL estiver definido
 #     predicoes-plataforma  push para a plataforma, se PREDICOES_PUSH_URL estiver definido
-#   conta de serviço pubsub-push, que assina o token OIDC dos pushes
+#   conta de serviço pubsub-push, que assina o token OIDC do push
 #
 # Permissões para as contas de serviço do time, se definidas:
-#   MODELO_SA      publica no tópico predicoes
 #   PLATAFORMA_SA  lê stream, gold e silver (as views da gold leem a silver) e roda consultas
 set -euo pipefail
 
@@ -85,30 +85,21 @@ agente="serviceAccount:service-$numero@gcp-sa-pubsub.iam.gserviceaccount.com"
 "$GCLOUD" pubsub subscriptions add-iam-policy-binding predicoes-bigquery \
     --member="$agente" --role=roles/pubsub.subscriber "$project" >/dev/null
 
-# Os pushes levam um token OIDC desta conta (audience = URL do endpoint), para o modelo e a
-# plataforma conferirem que a chamada veio do nosso Pub/Sub
+# O push leva um token OIDC desta conta (audience = URL do endpoint), para a plataforma
+# conferir que a chamada veio do nosso Pub/Sub
 echo "=== conta de serviço do push: $PUSH_SA"
 if ! existe "$GCLOUD" iam service-accounts describe "$PUSH_SA" "$project"; then
     "$GCLOUD" iam service-accounts create "${PUSH_SA%%@*}" \
-        --display-name="Push do Pub/Sub para o modelo e a plataforma" "$project"
+        --display-name="Push do Pub/Sub para a plataforma" "$project"
 fi
 "$GCLOUD" iam service-accounts add-iam-policy-binding "$PUSH_SA" \
     --member="$agente" --role=roles/iam.serviceAccountTokenCreator "$project" >/dev/null
 
-if [ -n "${EVENTOS_PUSH_URL:-}" ]; then
-    assinatura eventos-api --topic=eventos --push-endpoint="$EVENTOS_PUSH_URL" --ack-deadline=60 \
-        --push-auth-service-account="$PUSH_SA"
-fi
 if [ -n "${PREDICOES_PUSH_URL:-}" ]; then
     assinatura predicoes-plataforma --topic=predicoes --push-endpoint="$PREDICOES_PUSH_URL" \
         --push-auth-service-account="$PUSH_SA"
 fi
 
-if [ -n "${MODELO_SA:-}" ]; then
-    echo "=== $MODELO_SA publica em predicoes"
-    "$GCLOUD" pubsub topics add-iam-policy-binding predicoes \
-        --member="serviceAccount:$MODELO_SA" --role=roles/pubsub.publisher "$project" >/dev/null
-fi
 if [ -n "${PLATAFORMA_SA:-}" ]; then
     echo "=== $PLATAFORMA_SA lê stream, gold e silver"
     "$GCLOUD" projects add-iam-policy-binding "$GCP_PROJECT_ID" \
