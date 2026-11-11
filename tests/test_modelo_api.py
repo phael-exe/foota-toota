@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import importlib.util
 import json
 import sys
@@ -139,49 +138,20 @@ def fonte() -> FonteFalsa:
 
 
 @pytest.fixture
-def publicadas() -> list[dict]:
-    return []
-
-
-@pytest.fixture
-def cliente(fonte, publicadas) -> TestClient:
+def cliente(fonte) -> TestClient:
     app = api.criar_app(
-        api.Config(verificar_token=False),
+        api.Config(),
         features={BSA.league_id: Loja().features},
         modelos=api.Modelos(fonte, 600.0),
-        publicar=publicadas.append,
         relogio=lambda: AGORA,
     )
     return TestClient(app)
 
 
-def envelope(**campos) -> dict:
-    evento = {
-        "event_id": "fdorg_555047:TIMED:-:2026-10-16T23:00:00Z",
-        "match_id": "fdorg_555047",
-        "competition": "BSA",
-        "season": 2026,
-        "status": "TIMED",
-        "home_team_id": "4364",
-        "away_team_id": "6684",
-        "mode": "live",
-        **campos,
-    }
-    dados = base64.b64encode(json.dumps(evento).encode()).decode()
-    return {
-        "message": {
-            "data": dados,
-            "attributes": {"mode": evento["mode"], "competition": "BSA"},
-            "messageId": "1",
-        },
-        "subscription": "projects/pdm-bia-505511/subscriptions/eventos-api",
-    }
-
-
 # --- /predict ---------------------------------------------------------------
 
 
-def test_predict_devolve_e_publica_o_formato_do_contrato(cliente, publicadas):
+def test_predict_devolve_o_formato_do_contrato(cliente):
     resp = cliente.post("/predict", json={"match_id": "fdorg_555047"})
 
     assert resp.status_code == 200
@@ -198,39 +168,12 @@ def test_predict_devolve_e_publica_o_formato_do_contrato(cliente, publicadas):
     )
     assert corpo["predicted_outcome"] == "home"
     assert corpo["predicted_at"] == AGORA
-    assert publicadas == [corpo]
-    assert resp.headers["X-Publicada"] == "true"
 
 
 def test_predict_partida_desconhecida_responde_404(cliente):
     resp = cliente.post("/predict", json={"match_id": "fdorg_1"})
 
     assert resp.status_code == 404
-
-
-def test_predict_sem_publicar(cliente, publicadas):
-    resp = cliente.post(
-        "/predict", json={"match_id": "fdorg_555047", "publicar": False}
-    )
-
-    assert resp.status_code == 200
-    assert publicadas == []
-
-
-def test_predict_falha_ao_publicar_ainda_responde(fonte):
-    def falhar(_: dict) -> None:
-        raise RuntimeError("sem permissão no tópico")
-
-    app = api.criar_app(
-        api.Config(verificar_token=False),
-        features={BSA.league_id: Loja().features},
-        modelos=api.Modelos(fonte, 600.0),
-        publicar=falhar,
-    )
-    resp = TestClient(app).post("/predict", json={"match_id": "fdorg_555047"})
-
-    assert resp.status_code == 200
-    assert resp.headers["X-Publicada"] == "false"
 
 
 def test_predict_features_diretas_vao_na_ordem_canonica(cliente, fonte):
@@ -275,191 +218,6 @@ def test_predict_liga_sem_modelo_responde_503(cliente, fonte):
     resp = cliente.post("/predict", json={"match_id": "fdorg_555047"})
 
     assert resp.status_code == 503
-
-
-# --- /pubsub ----------------------------------------------------------------
-
-
-def test_pubsub_preve_partida_agendada(cliente, publicadas):
-    resp = cliente.post("/pubsub", json=envelope())
-
-    assert resp.status_code == 204
-    assert len(publicadas) == 1
-    assert publicadas[0]["event_id"] == (
-        "fdorg_555047:TIMED:-:2026-10-16T23:00:00Z"
-    )
-    assert publicadas[0]["match_id"] == "fdorg_555047"
-
-
-@pytest.mark.parametrize("status", ["FINISHED", "IN_PLAY", "POSTPONED"])
-def test_pubsub_ignora_partida_que_nao_esta_agendada(
-    cliente, publicadas, status
-):
-    resp = cliente.post("/pubsub", json=envelope(status=status))
-
-    assert resp.status_code == 204
-    assert publicadas == []
-
-
-@pytest.mark.parametrize(
-    "corpo",
-    [
-        b"nao e json",
-        b'{"message": {}}',
-        b'{"message": {"data": "%%%"}}',
-        json.dumps(
-            {"message": {"data": base64.b64encode(b"{}").decode()}}
-        ).encode(),
-    ],
-)
-def test_pubsub_confirma_mensagem_ilegivel(cliente, publicadas, corpo):
-    resp = cliente.post("/pubsub", content=corpo)
-
-    assert resp.status_code == 204
-    assert publicadas == []
-
-
-def test_pubsub_ignora_competicao_e_partida_desconhecidas(cliente, publicadas):
-    outra_liga = cliente.post("/pubsub", json=envelope(competition="CL"))
-    fora_da_gold = cliente.post(
-        "/pubsub",
-        json=envelope(match_id="fdorg_9", home_team_id="1", away_team_id="2"),
-    )
-
-    assert (outra_liga.status_code, fora_da_gold.status_code) == (204, 204)
-    assert publicadas == []
-
-
-def test_pubsub_descarta_evento_repetido(cliente, publicadas):
-    cliente.post("/pubsub", json=envelope())
-    cliente.post("/pubsub", json=envelope())
-
-    assert len(publicadas) == 1
-
-
-def test_pubsub_falha_ao_publicar_pede_reentrega(fonte):
-    publicadas: list[dict] = []
-    falhas = [RuntimeError("Pub/Sub fora")]
-
-    def publicar(mensagem: dict) -> None:
-        if falhas:
-            raise falhas.pop()
-        publicadas.append(mensagem)
-
-    app = api.criar_app(
-        api.Config(verificar_token=False),
-        features={BSA.league_id: Loja().features},
-        modelos=api.Modelos(fonte, 600.0),
-        publicar=publicar,
-    )
-    cliente = TestClient(app)
-
-    assert cliente.post("/pubsub", json=envelope()).status_code == 503
-    assert cliente.post("/pubsub", json=envelope()).status_code == 204
-    assert len(publicadas) == 1
-
-
-def test_pubsub_replay_acha_a_partida_pelo_confronto(
-    cliente, publicadas, fonte
-):
-    # O returno, já jogado: o evento traz o id fdorg_, a gold guarda fduk_
-    resp = cliente.post(
-        "/pubsub",
-        json=envelope(
-            event_id="fdorg_555011:TIMED:-:2026-09-19T21:00:00Z:replay-1",
-            match_id="fdorg_555011",
-            home_team_id="6684",
-            away_team_id="4364",
-            mode="replay",
-        ),
-    )
-
-    assert resp.status_code == 204
-    assert publicadas[0]["match_id"] == "fdorg_555011"
-    home_rest_days = api.FEATURES.index("home_rest_days")
-    assert fonte.estimador.entradas[-1][0][home_rest_days] == 9.0
-
-
-def test_pubsub_sem_modelo_pede_reentrega(cliente, fonte, publicadas):
-    fonte.falhar = api.SemModeloError("ainda não treinado")
-
-    assert cliente.post("/pubsub", json=envelope()).status_code == 503
-    assert publicadas == []
-
-
-# --- token do push ----------------------------------------------------------
-
-
-def _app_com_token(fonte, publicadas, audience="https://api/pubsub"):
-    cfg = api.Config(push_audience=audience)
-    app = api.criar_app(
-        cfg,
-        features={BSA.league_id: Loja().features},
-        modelos=api.Modelos(fonte, 600.0),
-        publicar=publicadas.append,
-    )
-    return TestClient(app)
-
-
-def _token(monkeypatch, dados: dict) -> list:
-    from google.oauth2 import id_token
-
-    chamadas: list = []
-
-    def verificar(token, request, audience):
-        chamadas.append((token, audience))
-        return dados
-
-    monkeypatch.setattr(id_token, "verify_oauth2_token", verificar)
-    return chamadas
-
-
-def test_pubsub_sem_token_responde_401(fonte, publicadas):
-    cliente = _app_com_token(fonte, publicadas)
-
-    assert cliente.post("/pubsub", json=envelope()).status_code == 401
-    assert publicadas == []
-
-
-def test_pubsub_aceita_token_da_conta_do_push(monkeypatch, fonte, publicadas):
-    chamadas = _token(
-        monkeypatch,
-        {
-            "email": "pubsub-push@pdm-bia-505511.iam.gserviceaccount.com",
-            "email_verified": True,
-        },
-    )
-    cliente = _app_com_token(fonte, publicadas)
-
-    resp = cliente.post(
-        "/pubsub", json=envelope(), headers={"Authorization": "Bearer abc"}
-    )
-
-    assert resp.status_code == 204
-    assert chamadas == [("abc", "https://api/pubsub")]
-    assert len(publicadas) == 1
-
-
-def test_pubsub_recusa_token_de_outra_conta(monkeypatch, fonte, publicadas):
-    _token(monkeypatch, {"email": "outro@x.com", "email_verified": True})
-    cliente = _app_com_token(fonte, publicadas)
-
-    resp = cliente.post(
-        "/pubsub", json=envelope(), headers={"Authorization": "Bearer abc"}
-    )
-
-    assert resp.status_code == 403
-    assert publicadas == []
-
-
-def test_pubsub_sem_audience_configurado_pede_reentrega(fonte, publicadas):
-    cliente = _app_com_token(fonte, publicadas, audience=None)
-
-    resp = cliente.post(
-        "/pubsub", json=envelope(), headers={"Authorization": "Bearer abc"}
-    )
-
-    assert resp.status_code == 500
 
 
 # --- peças ------------------------------------------------------------------
@@ -549,178 +307,12 @@ def test_health_mostra_versao_e_partidas(cliente):
     assert liga["partidas"] == 2
 
 
-# --- predição x real --------------------------------------------------------
-
-
-class AvaliacaoFalsa:
-    def __init__(self) -> None:
-        self.tabela = "p.modelo.predicoes_vs_real"
-        self.predicoes: list = []
-        self.resultados: list = []
-        self.falhar = False
-
-    def predicao(self, liga, evento, mensagem) -> None:
-        if self.falhar:
-            raise RuntimeError("BigQuery fora")
-        self.predicoes.append((liga.league_id, evento["match_id"], mensagem))
-
-    def resultado(self, liga, evento) -> None:
-        self.resultados.append((liga.league_id, evento["match_id"]))
-
-
-@pytest.fixture
-def avaliacao() -> AvaliacaoFalsa:
-    return AvaliacaoFalsa()
-
-
-@pytest.fixture
-def com_tabela(fonte, publicadas, avaliacao) -> TestClient:
-    app = api.criar_app(
-        api.Config(verificar_token=False),
-        features={BSA.league_id: Loja().features},
-        modelos=api.Modelos(fonte, 600.0),
-        publicar=publicadas.append,
-        avaliacao=avaliacao,
-        relogio=lambda: AGORA,
-    )
-    return TestClient(app)
-
-
-def test_agendada_grava_a_predicao_antes_de_publicar(
-    com_tabela, avaliacao, publicadas
-):
-    assert com_tabela.post("/pubsub", json=envelope()).status_code == 204
-
-    assert len(avaliacao.predicoes) == 1
-    liga, match_id, mensagem = avaliacao.predicoes[0]
-    assert (liga, match_id) == ("brasileirao_serie_a", "fdorg_555047")
-    assert publicadas == [mensagem]
-
-
-def test_encerrada_grava_o_resultado_na_mesma_partida(
-    com_tabela, avaliacao, publicadas
-):
-    resp = com_tabela.post(
-        "/pubsub",
-        json=envelope(
-            event_id="fdorg_555047:FINISHED:2-1:2026-10-16T23:00:00Z",
-            status="FINISHED",
-            score_home=2,
-            score_away=1,
-        ),
-    )
-
-    assert resp.status_code == 204
-    assert avaliacao.resultados == [("brasileirao_serie_a", "fdorg_555047")]
-    assert publicadas == []
-
-
-def test_falha_na_tabela_pede_reentrega_sem_publicar(
-    com_tabela, avaliacao, publicadas
-):
-    avaliacao.falhar = True
-
-    assert com_tabela.post("/pubsub", json=envelope()).status_code == 503
-    assert publicadas == []
-
-
-def test_health_mostra_a_tabela(com_tabela):
-    corpo = com_tabela.get("/health").json()
-
-    assert corpo["predicoes_vs_real"] == "p.modelo.predicoes_vs_real"
-
-
-@pytest.mark.parametrize(
-    ("casa", "fora", "esperado"),
-    [(2, 1, "home"), (1, 1, "draw"), (0, 3, "away"), (None, 1, None)],
-)
-def test_resultado_real(casa, fora, esperado):
-    evento = {"score_home": casa, "score_away": fora}
-
-    assert api.resultado_real(evento) == esperado
-
-
-class ClienteBQ:
-    def __init__(self) -> None:
-        self.consultas: list = []
-
-    def query(self, sql, job_config=None):
-        assert job_config is not None
-        parametros = {
-            p.name: (p.type_, p.value) for p in job_config.query_parameters
-        }
-        self.consultas.append((sql, parametros))
-
-        class Job:
-            def result(self, timeout=None):
-                return []
-
-        return Job()
-
-
-def _evento(**campos) -> dict:
-    return json.loads(base64.b64decode(envelope(**campos)["message"]["data"]))
-
-
-def test_merge_da_predicao_so_mexe_nas_colunas_da_predicao():
-    cliente = ClienteBQ()
-    tabela = api.Avaliacao("p.modelo.predicoes_vs_real", cliente)
-    mensagem = {
-        "prediction_id": "x",
-        "event_id": "e",
-        "model_name": "boosted_tree_brasileirao",
-        "model_version": "1",
-        "prob_home": 0.5,
-        "prob_draw": 0.3,
-        "prob_away": 0.2,
-        "predicted_outcome": "home",
-        "predicted_at": AGORA,
-    }
-
-    tabela.predicao(BSA, _evento(kickoff_utc="2026-10-16T23:00:00Z"), mensagem)
-
-    sql, parametros = cliente.consultas[0]
-    assert "MERGE `p.modelo.predicoes_vs_real` t" in sql
-    assert "ON t.match_id = s.match_id" in sql
-    assert "predicted_outcome = s.predicted_outcome" in sql
-    assert "score_home = s.score_home" not in sql
-    assert "s.predicted_outcome = t.real_outcome" in sql
-    assert parametros["match_id"] == ("STRING", "fdorg_555047")
-    assert parametros["season"] == ("INT64", 2026)
-    tipo, kickoff = parametros["kickoff_utc"]
-    assert tipo == "TIMESTAMP"
-    assert kickoff.isoformat() == "2026-10-16T23:00:00+00:00"
-
-
-def test_merge_do_resultado_calcula_o_real_e_o_acerto():
-    cliente = ClienteBQ()
-    tabela = api.Avaliacao("p.modelo.predicoes_vs_real", cliente)
-
-    tabela.resultado(
-        BSA,
-        _evento(
-            status="FINISHED",
-            score_home=0,
-            score_away=1,
-            source_updated_at="2026-10-17T01:00:00Z",
-        ),
-    )
-
-    sql, parametros = cliente.consultas[0]
-    assert "t.predicted_outcome = s.real_outcome" in sql
-    assert "prob_home" not in sql
-    assert parametros["real_outcome"] == ("STRING", "away")
-    assert parametros["score_away"] == ("INT64", 1)
-    assert parametros["result_at"][1].isoformat() == "2026-10-17T01:00:00+00:00"
-
-
 def test_inicio_carrega_features_e_modelo_antes_do_primeiro_pedido(fonte):
     loja = Loja()
     app = api.criar_app(
-        api.Config(verificar_token=False),
+        api.Config(),
         features={BSA.league_id: loja.features},
         modelos=api.Modelos(fonte, 600.0),
-        publicar=lambda mensagem: None,
         aquecer=True,
     )
 
@@ -734,12 +326,15 @@ def test_inicio_carrega_features_e_modelo_antes_do_primeiro_pedido(fonte):
 def test_inicio_sobe_mesmo_sem_modelo(fonte):
     fonte.falhar = api.SemModeloError("ainda não treinado")
     app = api.criar_app(
-        api.Config(verificar_token=False),
+        api.Config(),
         features={BSA.league_id: Loja().features},
         modelos=api.Modelos(fonte, 600.0),
-        publicar=lambda mensagem: None,
         aquecer=True,
     )
 
     with TestClient(app) as cliente:
         assert cliente.get("/health").status_code == 200
+
+
+def test_rota_pubsub_nao_existe_mais(cliente):
+    assert cliente.post("/pubsub", json={}).status_code == 404
