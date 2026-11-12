@@ -110,7 +110,7 @@ class Loja:
         self.leituras = 0
         self.linhas = linhas
 
-        def ler(dados: bytes, colunas: list[str]) -> list[dict]:
+        def ler(dados: bytes, colunas: list[str] | None) -> list[dict]:
             self.leituras += 1
             return [dict(item) for item in self.linhas]
 

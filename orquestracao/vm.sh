@@ -28,7 +28,7 @@ DAGS=(coleta_ao_vivo coleta_noticias disparar_eventos saude dataflow_liga_deslig
 project="--project=$GCP_PROJECT_ID"
 
 na_vm() {
-    "$GCLOUD" compute ssh "$VM" --zone="$ZONA" "$project" --tunnel-through-iap --command="$1"
+    "$GCLOUD" compute ssh "$VM" --zone="$ZONA" "$project" --tunnel-through-iap --quiet --command="$1"
 }
 
 case "${1:-}" in
@@ -62,7 +62,7 @@ case "${1:-}" in
         ;;
     tunel)
         echo "interface em http://localhost:8080 (usuário admin, senha: $0 senha)"
-        "$GCLOUD" compute ssh "$VM" --zone="$ZONA" "$project" --tunnel-through-iap -- -N -L 8080:localhost:8080
+        "$GCLOUD" compute ssh "$VM" --zone="$ZONA" "$project" --tunnel-through-iap --quiet -- -N -L 8080:localhost:8080
         ;;
     senha)
         na_vm 'cat ~/orquestracao/senhas/senhas.json'
