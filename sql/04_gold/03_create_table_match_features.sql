@@ -47,6 +47,13 @@ SELECT
         COALESCE(af.season_match_ids, []),
         COALESCE(h.h2h_match_ids, [])
     ) AS extra_history_match_ids,
+    -- the last data behind these features: the latest earlier match of either team (season
+    -- form, rest and head-to-head come from the same matches or older ones). G9 checks it is
+    -- before the kickoff; the model API returns it with every prediction.
+    GREATEST(
+        COALESCE(hf.history_latest_kickoff_utc, af.history_latest_kickoff_utc),
+        COALESCE(af.history_latest_kickoff_utc, hf.history_latest_kickoff_utc)
+    ) AS features_ate,
 
     -- filter, label, split and metadata
     COALESCE(hf.history_count, 0) = 5
