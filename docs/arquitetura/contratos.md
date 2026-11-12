@@ -292,11 +292,11 @@ na mesma rodada.
 | Tarefa | Comando |
 | --- | --- |
 | Criar ou conferir a infraestrutura | `streaming/infra.sh` |
-| Ligar o Dataflow (cobra por hora) | `streaming/dataflow.sh iniciar` |
-| Desligar o Dataflow | `streaming/dataflow.sh parar` |
-| Publicar o coletor ao vivo | `streaming/deploy_coletor.sh` |
-| Pausar ou retomar a coleta | `streaming/deploy_coletor.sh pausar` / `retomar` |
-| Replay de rodadas para a demo | `uv run python streaming/producer.py replay --rodadas 28-30 --intervalo 1` |
+| Ligar o Dataflow (cobra por hora) | DAG `dataflow_liga_desliga` com `ligar`, ou `streaming/dataflow.sh iniciar` |
+| Desligar o Dataflow | DAG `dataflow_liga_desliga` com `desligar`, ou `streaming/dataflow.sh parar` |
+| Publicar o coletor ao vivo | `streaming/deploy_coletor.sh` (o agendamento é do DAG `coleta_ao_vivo`) |
+| Coleta sem o Airflow (VM parada) | `streaming/deploy_coletor.sh retomar` / `pausar` (Cloud Scheduler) |
+| Replay de rodadas para a demo | DAG `disparar_eventos`, ou `uv run python streaming/producer.py replay --rodadas 28-30 --intervalo 1` |
 | Ver eventos sem publicar | `uv run python streaming/producer.py --sem-publicar replay --rodadas 30 --intervalo 0` |
 | Atualizar o batch (bronze -> gold) | `scripts/atualizar_partidas.sh` |
 | Treinar, avaliar e registrar os modelos | `uv run --no-project --with-requirements modelo/requirements-treino.txt python modelo/treinar.py` |

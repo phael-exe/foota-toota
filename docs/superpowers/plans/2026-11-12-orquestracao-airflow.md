@@ -46,7 +46,7 @@
 **Interfaces:**
 - Produces: `producer.replay(args, publicar)` levanta `SystemExit` com mensagem `"replay: nenhuma partida em <arquivo> para a temporada <t> e as rodadas <r>"` quando `linha_do_tempo` devolve lista vazia. O Cloud Run Job sai com código ≠ 0, o `CloudRunExecuteJobOperator` falha e o alerta dispara.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 ```python
 def test_replay_sem_partidas_falha(tmp_path):
@@ -63,14 +63,14 @@ def test_replay_sem_partidas_falha(tmp_path):
     assert publicados == []
 ```
 
-- [ ] **Step 2:** `uv run pytest tests/test_streaming.py -k replay_sem_partidas -v` → FAIL (`DID NOT RAISE`).
-- [ ] **Step 3:** Em `replay`, logo após `linha_do_tempo`, `sys.exit(...)` com a mensagem acima quando `eventos` está vazio.
-- [ ] **Step 4:** `uv run pytest tests/test_streaming.py -v && make lint` → PASS.
-- [ ] **Step 5:** Publicar a imagem nova do coletor e provar o override de args que os DAGs vão usar:
+- [x] **Step 2:** `uv run pytest tests/test_streaming.py -k replay_sem_partidas -v` → FAIL (`DID NOT RAISE`).
+- [x] **Step 3:** Em `replay`, logo após `linha_do_tempo`, `sys.exit(...)` com a mensagem acima quando `eventos` está vazio.
+- [x] **Step 4:** `uv run pytest tests/test_streaming.py -v && make lint` → PASS.
+- [x] **Step 5:** Publicar a imagem nova do coletor e provar o override de args que os DAGs vão usar:
   `streaming/deploy_coletor.sh` e depois
   `gcloud run jobs execute foota-toota-coletor --region=us-central1 --project=pdm-bia-505511 --wait --args=python,producer.py,replay,--rodadas,99`
   Expected: execução `failed`, log com `nenhuma partida`.
-- [ ] **Step 6: Commit** `fix(streaming): replay sem partidas termina com erro`
+- [x] **Step 6: Commit** `fix(streaming): replay sem partidas termina com erro`
 
 ---
 
@@ -106,7 +106,7 @@ def test_replay_sem_partidas_falha(tmp_path):
 - `entrada_alerta(dag_id: str, task_id: str, run_id: str, tentativa: int, erro: str) -> dict` — o payload estruturado, com `"mensagem": f"{dag_id}.{task_id} falhou: {erro}"`.
 - `registrar_falha(context) -> None` — o `on_failure_callback`: monta a entrada com o `context` e grava com `google.cloud.logging.Client(project=PROJETO).logger(LOG_ALERTAS).log_struct(..., severity="ERROR")`. Erro ao gravar é só logado (o callback não pode derrubar nada).
 
-- [ ] **Step 1: Escrever os testes que falham** em `tests/test_orquestracao.py`:
+- [x] **Step 1: Escrever os testes que falham** em `tests/test_orquestracao.py`:
 
 ```python
 AGORA = datetime(2026, 11, 12, 15, 0, tzinfo=UTC)
@@ -227,10 +227,10 @@ def test_entrada_do_alerta():
     )
 ```
 
-- [ ] **Step 2:** `uv run pytest tests/test_orquestracao.py -v` → FAIL (`ModuleNotFoundError: foota`).
-- [ ] **Step 3:** Implementar os módulos e o SQL conforme as interfaces.
-- [ ] **Step 4:** `uv run pytest tests/test_orquestracao.py -v && make lint` → PASS. Rodar o SQL uma vez no BigQuery (`bq query --project_id=pdm-bia-505511 --use_legacy_sql=false --parameter=desde:TIMESTAMP:2026-11-11T00:00:00Z --parameter=limite_min:INT64:10 < (sed 's/PROJECT/pdm-bia-505511/g' ...)`) → uma linha, sem erro.
-- [ ] **Step 5: Commit** `feat(orquestracao): regras de replay e de saúde, sem Airflow`
+- [x] **Step 2:** `uv run pytest tests/test_orquestracao.py -v` → FAIL (`ModuleNotFoundError: foota`).
+- [x] **Step 3:** Implementar os módulos e o SQL conforme as interfaces.
+- [x] **Step 4:** `uv run pytest tests/test_orquestracao.py -v && make lint` → PASS. Rodar o SQL uma vez no BigQuery (`bq query --project_id=pdm-bia-505511 --use_legacy_sql=false --parameter=desde:TIMESTAMP:2026-11-11T00:00:00Z --parameter=limite_min:INT64:10 < (sed 's/PROJECT/pdm-bia-505511/g' ...)`) → uma linha, sem erro.
+- [x] **Step 5: Commit** `feat(orquestracao): regras de replay e de saúde, sem Airflow`
 
 ---
 
@@ -260,7 +260,7 @@ def test_entrada_do_alerta():
 | `saude` | `*/15 * * * *`, `max_active_runs=1` | `api_modelo`: `GET {url}/health` com ID token (`google.oauth2.id_token.fetch_id_token`, audiência = URL do serviço lida com `run_v2.ServicesClient`), `TIMEOUT_HEALTH_S`; `jobs_cloud_run`: `run_v2.ExecutionsClient.list_executions` de `JOB_COLETOR` e `JOB_NOTICIAS` (falhou = `failed_count > 0`), `falhas_de_execucao`; `dataflow`: `dataflow_v1beta3.JobsV1Beta3Client.list_jobs` filtrado por nome, `estado_dataflow`, devolve o início ou `None`; `atraso_predicao` (depende de `dataflow`): se `None`, termina com `AirflowSkipException`; senão roda `consulta_atraso()` com `@desde = max(inicio, agora - 2 h)` e `@limite_min = ATRASO_MAX_MIN`. Problema → `AirflowFailException(mensagem)` (o callback alerta). `retries=0` em todas. |
 | `dataflow_liga_desliga` | `None` | param `acao` (`Param("ligar", enum=["ligar", "desligar"])`); `@task.branch`; **ligar**: `@task iniciar_dataflow` (sai sem nada se já há job ativo; senão `FlexTemplatesServiceClient.launch_flex_template` com `TEMPLATE_DATAFLOW`, parâmetros `api_url` e `subscription`, ambiente `num_workers=1`, `max_workers=1`, `machine_type="n1-standard-1"`, `enable_streaming_engine=True`, `temp_location`, `additional_user_labels={"projeto": "foota-toota"}`) e `@task api_min_instancias(1)`; **desligar**: `@task drenar_dataflow` (`update_job` com `requested_state=JOB_STATE_DRAINED` no job ativo) e `api_min_instancias(0)`. `api_min_instancias(n)` usa `run_v2.ServicesClient.update_service` mudando só `template.scaling.min_instance_count`. |
 
-- [ ] **Step 1: Escrever `orquestracao/tests/test_dags.py`** (pytest dentro da imagem):
+- [x] **Step 1: Escrever `orquestracao/tests/test_dags.py`** (pytest dentro da imagem):
 
 ```python
 def test_dags_carregam_sem_erro():
@@ -288,11 +288,11 @@ def test_saude_checa_o_atraso_depois_do_dataflow():
 
 Comando (`orquestracao/testar_dags.sh`): `docker run --rm -v "$PWD/orquestracao:/repo:ro" -e AIRFLOW__CORE__LOAD_EXAMPLES=false --entrypoint bash apache/airflow:3.3.2-python3.12 -c "pip install -q pytest && cd /repo && python -m pytest tests -q -p no:cacheprovider"`.
 
-- [ ] **Step 2:** `orquestracao/testar_dags.sh` → FAIL (nenhum DAG).
-- [ ] **Step 3:** Escrever `padrao.py`, os cinco DAGs e o compose.
-- [ ] **Step 4:** `orquestracao/testar_dags.sh` → PASS; `make lint test` → PASS.
-- [ ] **Step 5: Teste local.** `docker compose -f docker-compose.yaml -f docker-compose.local.yaml up -d`; abrir `localhost:8080`; despausar e disparar `disparar_eventos` com `PL`, `2024`, `10` → falha em `checar_replay` com "TRAIN/EVAL" e entrada nova em `gcloud logging read 'logName="projects/pdm-bia-505511/logs/foota-toota-alertas"' --project=pdm-bia-505511 --limit=1`. O `saude` local fica para a VM (o ID token exige service account). `docker compose down`.
-- [ ] **Step 6: Commit** `feat(orquestracao): DAGs de coleta, replay, saúde e Dataflow no Airflow`
+- [x] **Step 2:** `orquestracao/testar_dags.sh` → FAIL (nenhum DAG).
+- [x] **Step 3:** Escrever `padrao.py`, os cinco DAGs e o compose.
+- [x] **Step 4:** `orquestracao/testar_dags.sh` → PASS; `make lint test` → PASS.
+- [x] **Step 5: Teste local.** `docker compose -f docker-compose.yaml -f docker-compose.local.yaml up -d`; abrir `localhost:8080`; despausar e disparar `disparar_eventos` com `PL`, `2024`, `10` → falha em `checar_replay` com "TRAIN/EVAL" e entrada nova em `gcloud logging read 'logName="projects/pdm-bia-505511/logs/foota-toota-alertas"' --project=pdm-bia-505511 --limit=1`. O `saude` local fica para a VM (o ID token exige service account). `docker compose down`.
+- [x] **Step 6: Commit** `feat(orquestracao): DAGs de coleta, replay, saúde e Dataflow no Airflow`
 
 ---
 
@@ -318,13 +318,13 @@ Comando (`orquestracao/testar_dags.sh`): `docker run --rm -v "$PWD/orquestracao:
 - `senha`: imprime a senha do `admin` de `senhas/senhas.json` local.
 - `ligar` / `parar`: `instances start|stop`. `status`: estado da VM e `docker compose ps`.
 
-- [ ] **Step 1:** `bash -n orquestracao/infra.sh orquestracao/vm.sh orquestracao/instalar_docker.sh` → sem saída; `python -m json.tool orquestracao/alerta.json` → ok.
+- [x] **Step 1:** `bash -n orquestracao/infra.sh orquestracao/vm.sh orquestracao/instalar_docker.sh` → sem saída; `python -m json.tool orquestracao/alerta.json` → ok.
 - [ ] **Step 2:** `orquestracao/infra.sh` → termina sem erro; `gcloud projects get-iam-policy pdm-bia-505511 --flatten=bindings[].members --filter=bindings.members~airflow-orquestrador --format='value(bindings.role)'` lista os seis papéis.
 - [ ] **Step 3:** `orquestracao/vm.sh criar`, esperar o startup (`gcloud compute ssh ... --tunnel-through-iap -- docker compose version` responde), `orquestracao/vm.sh enviar` → os cinco serviços `healthy`/`running` em `vm.sh status`.
 - [ ] **Step 4: Verificar na VM.** Pelo túnel: `coleta_ao_vivo` com 2 execuções verdes seguidas; `saude` verde (com Dataflow drenado, `atraso_predicao` = skipped); `disparar_eventos` com `BSA`, `2026`, rodada do arquivo → Job `succeeded`, eventos em `stream.eventos_brutos` com `mode = replay`.
 - [ ] **Step 5: Alerta de ponta a ponta.** `gcloud run jobs execute foota-toota-coletor --args=python,producer.py,replay,--rodadas,99 --region=us-central1 --project=pdm-bia-505511`; disparar o `saude` → `jobs_cloud_run` falha com "execução ... falhou", entrada no log `foota-toota-alertas` e, com `ALERTA_EMAIL`, e-mail em até 5 min.
 - [ ] **Step 6:** Pausar os agendamentos antigos, um por vez: `gcloud scheduler jobs pause <nome> --location=us-central1 --project=pdm-bia-505511` para `foota-toota-coletor-5min` e `foota-toota-daily-run`. No cabeçalho de `deploy_coletor.sh`, registrar que o agendamento agora é do Airflow e que `retomar` é o plano B com a VM parada.
-- [ ] **Step 7: Commit** `feat(orquestracao): VM do Airflow, service account e alerta por e-mail`
+- [x] **Step 7: Commit** `feat(orquestracao): VM do Airflow, service account e alerta por e-mail`
 
 ---
 
@@ -335,12 +335,12 @@ Comando (`orquestracao/testar_dags.sh`): `docker run --rm -v "$PWD/orquestracao:
 - Create: `streaming/template_metadata.json` — parâmetros `api_url` e `subscription` (os mesmos nomes de `pipeline.run`)
 - Modify: `streaming/dataflow.sh` — subcomando `template`: `gcloud builds submit` da imagem `gcr.io/pdm-bia-505511/foota-toota-partidas-template:latest` e `gcloud dataflow flex-template build gs://foota-toota-505511-stream/dataflow/templates/partidas.json --image=... --sdk-language=PYTHON --metadata-file=streaming/template_metadata.json`
 
-- [ ] **Step 1:** Conferir que `pipeline.run` aceita `--api_url` e `--subscription` como opções do pipeline (o Flex Template passa os parâmetros como `--nome=valor`). Se algum for só `argparse` local sem `known_args`, ajustar e cobrir com um teste em `tests/test_streaming.py`.
-- [ ] **Step 2:** `streaming/dataflow.sh template` → `gs://foota-toota-505511-stream/dataflow/templates/partidas.json` existe.
-- [ ] **Step 3:** Pela interface do Airflow na VM, `dataflow_liga_desliga` com `ligar` → job `foota-toota-partidas` `Running` em `streaming/dataflow.sh status` e `modelo-api` com `min-instances=1` (`gcloud run services describe modelo-api --region=us-central1 --project=pdm-bia-505511 --format='value(spec.template.metadata.annotations."autoscaling.knative.dev/minScale")'`).
-- [ ] **Step 4: Demo de ponta a ponta.** `disparar_eventos` (BSA, 2026, uma rodada do TEST) → em ~2 min, linhas novas em `gold.predicoes` com `mode = 'replay'` e `features_antes_do_jogo = true`; `saude` verde com `atraso_predicao` executado (não skipped).
-- [ ] **Step 5:** `dataflow_liga_desliga` com `desligar` → job `Draining`/`Drained` e `minScale` 0.
-- [ ] **Step 6: Commit** `feat(streaming): Dataflow como Flex Template, ligado e desligado pelo Airflow`
+- [x] **Step 1:** Conferir que `pipeline.run` aceita `--api_url` e `--subscription` como opções do pipeline (o Flex Template passa os parâmetros como `--nome=valor`). Se algum for só `argparse` local sem `known_args`, ajustar e cobrir com um teste em `tests/test_streaming.py`.
+- [x] **Step 2:** `streaming/dataflow.sh template` → `gs://foota-toota-505511-stream/dataflow/templates/partidas.json` existe.
+- [x] **Step 3:** Pela interface do Airflow na VM, `dataflow_liga_desliga` com `ligar` → job `foota-toota-partidas` `Running` em `streaming/dataflow.sh status` e `modelo-api` com `min-instances=1` (`gcloud run services describe modelo-api --region=us-central1 --project=pdm-bia-505511 --format='value(spec.template.metadata.annotations."autoscaling.knative.dev/minScale")'`).
+- [x] **Step 4: Demo de ponta a ponta.** `disparar_eventos` (BSA, 2026, uma rodada do TEST) → em ~2 min, linhas novas em `gold.predicoes` com `mode = 'replay'` e `features_antes_do_jogo = true`; `saude` verde com `atraso_predicao` executado (não skipped).
+- [x] **Step 5:** `dataflow_liga_desliga` com `desligar` → job `Draining`/`Drained` e `minScale` 0.
+- [x] **Step 6: Commit** `feat(streaming): Dataflow como Flex Template, ligado e desligado pelo Airflow`
 
 ---
 
@@ -352,6 +352,6 @@ Comando (`orquestracao/testar_dags.sh`): `docker run --rm -v "$PWD/orquestracao:
 - Modify: `docs/arquitetura/contratos.md` — o coletor e o Dataflow agora são acionados pelo Airflow; o Cloud Scheduler ficou como plano B.
 - Modify: este plano — marcar os checkboxes feitos.
 
-- [ ] **Step 1:** Escrever os três documentos, sem referência a disciplina ou entrega.
-- [ ] **Step 2:** `make lint` → PASS.
-- [ ] **Step 3: Commit** `docs: orquestração com Airflow`
+- [x] **Step 1:** Escrever os três documentos, sem referência a disciplina ou entrega.
+- [x] **Step 2:** `make lint` → PASS.
+- [x] **Step 3: Commit** `docs: orquestração com Airflow`

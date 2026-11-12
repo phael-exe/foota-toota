@@ -7,6 +7,9 @@
 #   streaming/deploy_coletor.sh pausar     # para de coletar (o job continua lá)
 #   streaming/deploy_coletor.sh retomar
 #
+# Com o Airflow no ar (orquestracao/), quem agenda é o DAG coleta_ao_vivo e este agendamento fica
+# pausado; `retomar` é o plano B com a VM parada.
+#
 # A chave do Football-Data.org vai como variável de ambiente do job, visível para quem tem acesso
 # ao Cloud Run do projeto.
 set -euo pipefail

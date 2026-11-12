@@ -22,7 +22,9 @@ Dois caminhos de dados se encontram no BigQuery. O **batch** reconstrói o
 histórico de todas as fontes nas camadas bronze, silver e gold. O
 **streaming** traz cada mudança de partida do Brasileirão poucos minutos
 depois de ela acontecer. O modelo é treinado sobre a gold do batch e responde
-tanto a chamadas HTTP quanto aos eventos do stream.
+tanto a chamadas HTTP quanto aos eventos do stream. Um **Airflow** dispara os
+coletores e o gerador de eventos, liga e desliga o streaming e confere a saúde
+de tudo.
 
 ```mermaid
 flowchart LR
@@ -33,13 +35,16 @@ flowchart LR
         GLD --> PUB["bucket público<br>Parquet"]
     end
     subgraph stream ["Streaming"]
-        FDO["Football-Data.org"] --> COL["coletor<br>Cloud Run Job, a cada 5 min"]
+        FDO["Football-Data.org"] --> COL["coletor e replay<br>Cloud Run Job"]
         COL --> EVT{{"Pub/Sub: eventos"}}
         EVT -->|"assinatura BigQuery"| EBR[("stream.eventos_brutos")]
         EVT -->|"pull"| DFL["Dataflow<br>Apache Beam"]
         DFL --> SPA[("stream.partidas<br>evento + predição")]
         DFL --> SRJ[("stream.partidas_rejeitadas")]
         DFL --> SFA[("stream.predicoes_falhas")]
+    end
+    subgraph orq ["Orquestração"]
+        AIR["Airflow na VM<br>coleta, replay, saúde"]
     end
     subgraph ml ["Modelo"]
         TRN["modelo/treinar.py"] --> REG["Vertex AI<br>Model Registry"]
@@ -48,6 +53,9 @@ flowchart LR
     PUB --> TRN
     PUB --> API
     DFL -->|"POST /predict/lote<br>partidas agendadas"| API
+    AIR -->|"executa"| COL
+    AIR -->|"liga / drena"| DFL
+    AIR -.->|"/health"| API
     SIL --> UNI["gold.partidas_unificadas"]
     SPA --> UNI
     UNI --> ATU["gold.partidas_atual"]
@@ -139,6 +147,17 @@ A API (pacote `modelo/api/`, FastAPI) carrega a versão `campeao` de cada liga e
 confere a cada 10 minutos se ela mudou, então trocar o modelo não exige novo
 deploy. Uma liga sem versão `campeao` fica sem predição: nenhum modelo
 reprovado é servido.
+
+### Orquestração
+
+Um Airflow 3 numa VM (`orquestracao/`) aciona os serviços e não processa
+dados. Ele executa o coletor a cada 5 minutos e as notícias uma vez por dia.
+O DAG `disparar_eventos` gera os eventos da demo reproduzindo rodadas, e só
+aceita temporadas fora do treino do modelo. O `dataflow_liga_desliga` sobe o
+streaming por um Flex Template e o drena depois. O `saude` confere, a cada 15
+minutos, a API, as execuções dos Jobs, o Dataflow e o atraso entre evento e
+predição. Toda task que falha grava um alerta no Cloud Logging, que vira
+e-mail. Detalhes em [docs/arquitetura/orquestracao.md](docs/arquitetura/orquestracao.md).
 
 ### Escolhas técnicas
 
@@ -238,10 +257,20 @@ fontes, a silver e a gold, e reexporta as tabelas públicas.
 
 ```bash
 streaming/infra.sh               # tópicos, assinaturas, dataset stream e views
-streaming/deploy_coletor.sh      # coletor no Cloud Run Job + Cloud Scheduler (5 min)
-streaming/dataflow.sh iniciar    # pipeline no Dataflow (cobra por hora)
+streaming/deploy_coletor.sh      # imagem do coletor no Cloud Run Job
+streaming/dataflow.sh template   # Flex Template do pipeline (o Airflow liga por ele)
+streaming/dataflow.sh iniciar    # ou: liga direto daqui, sem Airflow (cobra por hora)
 streaming/dataflow.sh status
 streaming/dataflow.sh parar      # drena e encerra
+```
+
+Com o Airflow (veja [orquestração](docs/arquitetura/orquestracao.md)):
+
+```bash
+orquestracao/infra.sh            # service account, firewall do IAP e alerta por e-mail
+orquestracao/vm.sh criar         # VM do Airflow (uma vez)
+orquestracao/vm.sh enviar        # publica os DAGs e sobe o Airflow
+orquestracao/vm.sh tunel         # interface em http://localhost:8080
 ```
 
 Para ver o fluxo sem esperar uma rodada, reproduza rodadas já jogadas:
@@ -372,9 +401,10 @@ do cliente aceitam o prefixo `PITCHSIDE_` e as da aplicação o prefixo
 | `scripts/` | Coleta do batch, atualização das partidas e exportação pública |
 | `sql/` | Camadas bronze, silver e gold, regras de qualidade e tabelas do stream |
 | `streaming/` | Coletor, pipeline Apache Beam, infraestrutura e deploy |
+| `orquestracao/` | Airflow: DAGs, docker compose, VM e alerta |
 | `modelo/` | API, treino, Dockerfile, SQL de avaliação e deploy no Cloud Run |
 | `src/footatoota/` | Configuração do cliente da Big Balls Data |
-| `tests/` | Testes do cliente, do streaming e do modelo |
+| `tests/` | Testes do cliente, do streaming, do modelo e da orquestração |
 | `docs/` | Contratos do pipeline, camada silver e [catálogo de 129 fontes de futebol](docs/fontes-futebol/README.md) |
 | `Dockerfile` | Imagem do job diário de notícias |
 
