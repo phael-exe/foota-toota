@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import json
 import sys
@@ -132,6 +133,20 @@ def test_linha_do_tempo_agenda_a_rodada_antes_dos_resultados():
 def test_rodadas_aceita_intervalo_e_lista():
     assert producer._rodadas("28-30") == {28, 29, 30}
     assert producer._rodadas("5,7") == {5, 7}
+
+
+def test_replay_sem_partidas_falha(tmp_path):
+    arquivo = tmp_path / "matches.jsonl"
+    arquivo.write_text(json.dumps(partida(rodada=29)) + "\n")
+    args = argparse.Namespace(
+        arquivo=str(arquivo), temporada=2026, rodadas={99}, intervalo=0
+    )
+    publicados = []
+
+    with pytest.raises(SystemExit, match="nenhuma partida"):
+        producer.replay(args, publicados.extend)
+
+    assert publicados == []
 
 
 # --- limpeza do pipeline ----------------------------------------------------

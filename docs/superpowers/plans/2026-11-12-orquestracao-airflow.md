@@ -112,68 +112,119 @@ def test_replay_sem_partidas_falha(tmp_path):
 AGORA = datetime(2026, 11, 12, 15, 0, tzinfo=UTC)
 JANELA = timedelta(minutes=30)
 
+
 def test_argumentos_do_replay_apontam_o_arquivo_da_competicao():
     assert replay.argumentos_replay("PL", 2026, "10-11", 0.5) == [
-        "python", "producer.py", "replay",
-        "--arquivo", "gs://foota-toota-505511/bronze/football_data_org/competition=PL/matches.jsonl",
-        "--temporada", "2026", "--rodadas", "10-11", "--intervalo", "0.5",
+        "python",
+        "producer.py",
+        "replay",
+        "--arquivo",
+        "gs://foota-toota-505511/bronze/football_data_org/competition=PL/matches.jsonl",
+        "--temporada",
+        "2026",
+        "--rodadas",
+        "10-11",
+        "--intervalo",
+        "0.5",
     ]
+
 
 @pytest.mark.parametrize("texto", ["31;rm", "", "a-b", "31-", "-3"])
 def test_rodadas_malformadas_sao_recusadas(texto): ...  # ValueError
 
+
 def test_competicao_desconhecida_e_recusada(): ...  # consulta_primeira_test("XYZ") -> ValueError
+
 
 def test_temporada_de_treino_e_recusada():
     with pytest.raises(ValueError, match="TEST começa em 2025"):
         replay.checar_fora_da_amostra("BSA", 2024, 2025)
     replay.checar_fora_da_amostra("BSA", 2026, 2025)  # não levanta
 
+
 def test_sem_test_recusa(): ...  # primeira_test=None -> ValueError
+
 
 def test_overrides_no_formato_do_cloud_run():
     assert replay.overrides(["a"]) == {"container_overrides": [{"args": ["a"]}]}
 
+
 def test_api_lenta_mas_ok_nao_e_problema():
-    corpo = {"ligas": {"BSA": {"motivo": None}, "PL": {"motivo": "sem_campeao"}}}
+    corpo = {
+        "ligas": {"BSA": {"motivo": None}, "PL": {"motivo": "sem_campeao"}}
+    }
     assert saude.problema_api(200, corpo) is None
+
 
 def test_api_fora_ou_vazia_e_problema():
     assert saude.problema_api(503, None) == "/health respondeu 503"
-    assert saude.problema_api(200, {"ligas": {}}) == "a API não carregou nenhuma liga"
+    assert (
+        saude.problema_api(200, {"ligas": {}})
+        == "a API não carregou nenhuma liga"
+    )
+
 
 def test_falha_recente_conta_mesmo_com_sucesso_depois():
     execucoes = [
-        {"job": "coletor", "nome": "c-1", "fim": AGORA - timedelta(minutes=10), "falhou": True},
-        {"job": "coletor", "nome": "c-2", "fim": AGORA - timedelta(minutes=5), "falhou": False},
+        {
+            "job": "coletor",
+            "nome": "c-1",
+            "fim": AGORA - timedelta(minutes=10),
+            "falhou": True,
+        },
+        {
+            "job": "coletor",
+            "nome": "c-2",
+            "fim": AGORA - timedelta(minutes=5),
+            "falhou": False,
+        },
     ]
     assert saude.falhas_de_execucao(execucoes, AGORA, JANELA) == [
         "coletor: execução c-1 falhou às 14:50 UTC"
     ]
 
+
 def test_falha_fora_da_janela_nao_conta(): ...  # fim = AGORA - 31 min -> []
 
+
 def test_dataflow_drenado_nao_e_problema():
-    jobs = [{"estado": "JOB_STATE_DRAINED", "inicio": AGORA - timedelta(hours=3), "fim": AGORA - timedelta(hours=2)}]
+    jobs = [
+        {
+            "estado": "JOB_STATE_DRAINED",
+            "inicio": AGORA - timedelta(hours=3),
+            "fim": AGORA - timedelta(hours=2),
+        }
+    ]
     assert saude.estado_dataflow(jobs, AGORA, JANELA) == (None, None)
     assert saude.estado_dataflow([], AGORA, JANELA) == (None, None)
 
+
 def test_dataflow_rodando_devolve_o_inicio(): ...  # RUNNING mais recente -> (inicio, None)
+
 
 def test_dataflow_que_falhou_agora_e_problema(): ...  # FAILED, fim na janela -> (None, "o job do Dataflow falhou às ...")
 
+
 def test_atraso_so_com_pendentes():
     assert saude.problema_atraso(0, None, 10) is None
-    assert saude.problema_atraso(3, AGORA, 10).startswith("3 eventos de jogo agendado")
+    assert saude.problema_atraso(3, AGORA, 10).startswith(
+        "3 eventos de jogo agendado"
+    )
+
 
 def test_consulta_de_atraso_usa_o_projeto():
     sql = saude.consulta_atraso()
-    assert "PROJECT" not in sql and "`pdm-bia-505511.stream.eventos_brutos`" in sql
+    assert (
+        "PROJECT" not in sql and "`pdm-bia-505511.stream.eventos_brutos`" in sql
+    )
     assert "@desde" in sql and "@limite_min" in sql
+
 
 def test_entrada_do_alerta():
     e = alerta.entrada_alerta("saude", "api_modelo", "r1", 2, "boom")
-    assert e["mensagem"] == "saude.api_modelo falhou: boom" and e["tentativa"] == 2
+    assert (
+        e["mensagem"] == "saude.api_modelo falhou: boom" and e["tentativa"] == 2
+    )
 ```
 
 - [ ] **Step 2:** `uv run pytest tests/test_orquestracao.py -v` → FAIL (`ModuleNotFoundError: foota`).
@@ -216,14 +267,19 @@ def test_dags_carregam_sem_erro():
     bag = DagBag(dag_folder=DAGS, include_examples=False)
     assert bag.import_errors == {}
     assert set(bag.dag_ids) == {
-        "coleta_ao_vivo", "coleta_noticias", "disparar_eventos",
-        "saude", "dataflow_liga_desliga",
+        "coleta_ao_vivo",
+        "coleta_noticias",
+        "disparar_eventos",
+        "saude",
+        "dataflow_liga_desliga",
     }
+
 
 def test_todo_dag_alerta_na_falha():
     for dag in DagBag(dag_folder=DAGS, include_examples=False).dags.values():
         for t in dag.tasks:
             assert t.on_failure_callback, f"{dag.dag_id}.{t.task_id}"
+
 
 def test_saude_checa_o_atraso_depois_do_dataflow():
     dag = DagBag(dag_folder=DAGS, include_examples=False).dags["saude"]
