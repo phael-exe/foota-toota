@@ -5,6 +5,7 @@
 #   streaming/dataflow.sh iniciar
 #   streaming/dataflow.sh parar     # drena: termina o que já leu e encerra
 #   streaming/dataflow.sh status
+#   streaming/dataflow.sh template  # publica o Flex Template que o Airflow usa para ligar o job
 #
 # O job cobra por hora enquanto roda (1 worker n1-standard-1): desligue depois da demo. Desligado,
 # os eventos esperam na assinatura eventos-dataflow (até 7 dias) e continuam caindo em
@@ -83,12 +84,31 @@ case "${1:-}" in
         fi
         "$GCLOUD" dataflow jobs drain "$id" --project="$GCP_PROJECT_ID" --region="$STREAM_REGION"
         ;;
+    template)
+        # Mesmo pipeline, empacotado para ser lançado sem o Beam local (DAG
+        # dataflow_liga_desliga do Airflow)
+        imagem="gcr.io/$GCP_PROJECT_ID/$JOB-template:latest"
+        # Build local: a imagem base do launcher tem camadas zstd, que o Docker
+        # do Cloud Build não abre. O login no registry vale só para este push.
+        docker build --platform=linux/amd64 -f "$root/streaming/Dockerfile.template" \
+            -t "$imagem" "$root/streaming"
+        docker_config="$(mktemp -d)"
+        trap 'rm -rf "$docker_config"' EXIT
+        "$GCLOUD" auth print-access-token |
+            DOCKER_CONFIG="$docker_config" docker login -u oauth2accesstoken --password-stdin https://gcr.io
+        DOCKER_CONFIG="$docker_config" docker push "$imagem"
+        "$GCLOUD" dataflow flex-template build "gs://$STREAM_BUCKET/dataflow/templates/partidas.json" \
+            --image="$imagem" \
+            --sdk-language=PYTHON \
+            --metadata-file="$root/streaming/template_metadata.json" \
+            --project="$GCP_PROJECT_ID"
+        ;;
     status)
         "$GCLOUD" dataflow jobs list --project="$GCP_PROJECT_ID" --region="$STREAM_REGION" \
             --filter="name=$JOB" --limit=3
         ;;
     *)
-        echo "uso: $0 iniciar|parar|status" >&2
+        echo "uso: $0 iniciar|parar|status|template" >&2
         exit 2
         ;;
 esac

@@ -1,0 +1,12 @@
+# Imagem do Flex Template do pipeline de streaming (job foota-toota-partidas), para o Airflow
+# ligar o job sem o Beam instalado: o launcher roda pipeline.py e submete o job. Os workers
+# usam a imagem padrão do SDK do Beam desta versão e deste Python (3.12).
+FROM gcr.io/dataflow-templates-base/python312-template-launcher-base:flex_templates_base_image_release_20261104_RC00
+
+WORKDIR /template
+ENV FLEX_TEMPLATE_PYTHON_PY_FILE=/template/pipeline.py
+
+COPY requirements-pipeline.txt .
+RUN pip install --no-cache-dir -r requirements-pipeline.txt
+
+COPY pipeline.py .
