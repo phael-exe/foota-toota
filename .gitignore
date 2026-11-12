@@ -227,3 +227,5 @@ data/
 *.zip
 # BigQuery script output
 sql/out/
+orquestracao/.env
+orquestracao/senhas/

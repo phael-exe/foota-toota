@@ -27,6 +27,7 @@ TABELA_SPLIT = {
     "PL": "gold.match_training_epl",
 }
 
+CONEXAO = "google_cloud_default"
 LOG_ALERTAS = "foota-toota-alertas"
 # Uma execução que falhou dentro da janela vira alerta, mesmo que outra já
 # tenha passado depois
