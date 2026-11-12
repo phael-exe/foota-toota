@@ -18,9 +18,7 @@ _RODADAS = re.compile(r"\d+(-\d+)?(,\d+(-\d+)?)*")
 def validar_rodadas(texto: str) -> str:
     rodadas = texto.strip()
     if not _RODADAS.fullmatch(rodadas):
-        raise ValueError(
-            f"rodadas inválidas: {texto!r} (use 31, 28-30 ou 5,7)"
-        )
+        raise ValueError(f"rodadas inválidas: {texto!r} (use 31, 28-30 ou 5,7)")
     return rodadas
 
 
