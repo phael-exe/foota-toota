@@ -4,7 +4,7 @@
 # (sklearn-cpu.1-6): o model.joblib treinado aqui carrega na API e também num
 # endpoint do Vertex. Um pickle de outra versão pode não carregar.
 fastapi==0.146.0
-google-auth==2.62.0
+google-auth==2.62.2
 google-cloud-storage==3.14.1
 httpx==0.28.1
 joblib==1.6.0
