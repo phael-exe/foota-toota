@@ -54,18 +54,21 @@ MAX_ARVORES = 300
 # Força de longo prazo dos clubes antes do jogo
 # (sql/04_gold/02a_create_table_match_elo.sql)
 ELO = ("elo_home", "elo_away", "elo_diff", "elo_p_home")
+# As probabilidades do mercado, sem a margem da casa (as odds de fechamento nos
+# jogos passados, as de antes do jogo nos próximos; vazias sem odds ainda)
+ODDS = ("odds_p_home", "odds_p_draw", "odds_p_away")
+_ELO_DESCANSO = ("elo_diff", "elo_p_home", "home_rest_days", "away_rest_days")
 # Os conjuntos de features que disputam cada liga, pela log loss em EVAL (nunca
-# TEST): a forma recente que o modelo usava, ela com o Elo, e o Elo só com o
-# descanso, que ganha onde a forma mais atrapalha do que ajuda
+# TEST): a forma recente da versão 1, ela com o Elo, o Elo com o descanso (a
+# versão 2) e ele com o mercado. O mercado nunca vai sozinho: a API prevê jogos
+# semanas antes de haver odds, e aí só sobraria a média dos resultados; com o
+# Elo junto, as árvores seguem por ele quando as odds faltam (o treino tem os
+# dois casos)
 CANDIDATAS: dict[str, tuple[str, ...]] = {
     "forma": api.FEATURES,
     "forma+elo": (*api.FEATURES, *ELO),
-    "elo+descanso": (
-        "elo_diff",
-        "elo_p_home",
-        "home_rest_days",
-        "away_rest_days",
-    ),
+    "elo+descanso": _ELO_DESCANSO,
+    "elo+descanso+odds": (*_ELO_DESCANSO, *ODDS),
 }
 
 

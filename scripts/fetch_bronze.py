@@ -132,6 +132,107 @@ def normalize_football_data_uk(content: str) -> str:
     return out.getvalue()
 
 
+# As odds dos próximos jogos (fixtures.csv para as ligas europeias e
+# new_league_fixtures.csv para o Brasil), num formato só: o BigQuery lê o CSV
+# pela posição das colunas, e os dois arquivos têm cabeçalhos diferentes
+FIXTURES_COLUMNS = [
+    "Div",
+    "Date",
+    "Time",
+    "HomeTeam",
+    "AwayTeam",
+    "PSH",
+    "PSD",
+    "PSA",
+    "AvgH",
+    "AvgD",
+    "AvgA",
+    "B365H",
+    "B365D",
+    "B365A",
+]
+# As divisões dos CSVs europeus que a silver conhece
+FIXTURES_DIVS = frozenset(
+    {"E0", "E1", "SP1", "I1", "D1", "F1", "N1", "P1", "B1", "SC0"}
+)
+# A Premier League antes de 2022/23, só pelas odds do treino do modelo: fica
+# numa pasta própria do bronze, que só silver.match_odds lê. A silver guarda
+# esses jogos com o id do Big Balls Data, e clubes com outro id lá (QPR,
+# Middlesbrough) duplicariam jogos se entrassem em silver.matches
+EPL_HISTORICO = [
+    ("2122", "2021-2022"),
+    ("2021", "2020-2021"),
+    ("1920", "2019-2020"),
+    ("1819", "2018-2019"),
+    ("1718", "2017-2018"),
+    ("1617", "2016-2017"),
+    ("1516", "2015-2016"),
+    ("1415", "2014-2015"),
+]
+
+
+def normalize_fixtures(fixtures: str | None, novas: str | None) -> str:
+    """Os jogos das ligas que temos, com as odds de antes do jogo, em
+    FIXTURES_COLUMNS. O Brasileirão vem do arquivo das ligas novas, como
+    Div BRA. Um arquivo ausente (None) só não contribui."""
+    out = io.StringIO()
+    writer = csv.DictWriter(
+        out, fieldnames=FIXTURES_COLUMNS, lineterminator="\n"
+    )
+    writer.writeheader()
+    for row in csv.DictReader(io.StringIO((fixtures or "").lstrip("\ufeff"))):
+        if row.get("Div") in FIXTURES_DIVS:
+            writer.writerow({c: row.get(c) or "" for c in FIXTURES_COLUMNS})
+    for row in csv.DictReader(io.StringIO((novas or "").lstrip("\ufeff"))):
+        if row.get("Country") == "Brazil" and row.get("League") == "Serie A":
+            linha = {c: row.get(c) or "" for c in FIXTURES_COLUMNS}
+            linha.update(
+                Div="BRA", HomeTeam=row.get("Home"), AwayTeam=row.get("Away")
+            )
+            writer.writerow(linha)
+    return out.getvalue()
+
+
+def fetch_football_data_uk_fixtures(client: httpx.Client, state: dict) -> int:
+    """As odds dos próximos jogos, um retrato por dia: o site só publica a
+    semana corrente, então o histórico fica no bronze (dt=AAAA-MM-DD)."""
+    print("\n=== [1c/4] Odds dos próximos jogos (Football-Data.co.uk) ===")
+    headers = {"User-Agent": "Mozilla/5.0 (FootaToota MultiLeague/0.1)"}
+    conteudos: dict[str, str | None] = {}
+    for nome in ("fixtures.csv", "new_league_fixtures.csv"):
+        conteudos[nome] = None
+        try:
+            resp = client.get(
+                f"https://www.football-data.co.uk/{nome}",
+                headers=headers,
+                follow_redirects=True,
+                timeout=30.0,
+            )
+            if resp.status_code == 200:
+                conteudos[nome] = resp.text
+            else:
+                print(f"  ✗ {nome}: status {resp.status_code}")
+        except Exception as e:
+            print(f"  ✗ Falha ao baixar {nome}: {e}")
+    if not any(conteudos.values()):
+        return 0
+    content = normalize_fixtures(
+        conteudos["fixtures.csv"], conteudos["new_league_fixtures.csv"]
+    )
+    hoje = datetime.now(UTC).strftime("%Y-%m-%d")
+    out_dir = DATA_DIR / "football_data_uk_fixtures" / f"dt={hoje}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "fixtures.csv").write_text(content, encoding="utf-8")
+    total = len(content.strip().splitlines()) - 1
+    print(f"  ✓ {total} jogos com odds de antes do jogo")
+    state.setdefault("sources", {})["football_data_uk_fixtures"] = {
+        "status": "success",
+        "last_updated": datetime.now(UTC).isoformat(),
+        "total_records": total,
+    }
+    return total
+
+
 def fetch_football_data_uk(client: httpx.Client, state: dict) -> int:
     """Baixa CSVs de 10 ligas europeias, de 2022-2023 até a temporada atual."""
     print("\n=== [1/4] Coletando Football-Data.co.uk (10 Ligas Européias) ===")
@@ -156,53 +257,57 @@ def fetch_football_data_uk(client: httpx.Client, state: dict) -> int:
     ]
     total_saved = 0
     headers = {"User-Agent": "Mozilla/5.0 (FootaToota MultiLeague/0.1)"}
+    pasta = DATA_DIR / "football_data_uk"
+    arquivos = [
+        (s, liga, pasta / f"season={s[1]}" / f"league={liga[1]}")
+        for s in seasons
+        for liga in leagues
+    ]
+    historico = DATA_DIR / "football_data_uk_epl_historico"
+    arquivos += [
+        (s, ("E0", "Premier_League"), historico / f"season={s[1]}")
+        for s in EPL_HISTORICO
+    ]
 
-    for s_code, s_name in seasons:
-        for l_code, l_name in leagues:
-            out_dir = (
-                DATA_DIR
-                / "football_data_uk"
-                / f"season={s_name}"
-                / f"league={l_name}"
-            )
-            out_dir.mkdir(parents=True, exist_ok=True)
-            out_file = out_dir / "matches.csv"
+    for (s_code, s_name), (l_code, l_name), out_dir in arquivos:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_file = out_dir / "matches.csv"
 
-            url = f"https://football-data.co.uk/mmz4281/{s_code}/{l_code}.csv"
-            content = None
-            for attempt in range(3):
-                try:
-                    resp = client.get(
-                        url,
-                        headers=headers,
-                        follow_redirects=True,
-                        timeout=60.0,
-                    )
-                    if resp.status_code == 200 and len(resp.text.strip()) > 0:
-                        content = resp.text.lstrip("\ufeff")
-                        break
-                    print(f"  ✗ {l_name} ({s_name}): status {resp.status_code}")
-                except Exception as e:
-                    print(
-                        f"  ✗ Falha ao baixar {l_name} ({s_name}), "
-                        f"tentativa {attempt + 1}: {e}"
-                    )
-                time.sleep(5)
-            if content is None and out_file.exists():
-                # o arquivo de uma coleta anterior pode estar na ordem do
-                # site; normalizar um arquivo já normalizado não o altera
-                print(
-                    f"  ↺ {l_name} ({s_name}): "
-                    "mantendo o arquivo anterior, normalizado"
+        url = f"https://football-data.co.uk/mmz4281/{s_code}/{l_code}.csv"
+        content = None
+        for attempt in range(3):
+            try:
+                resp = client.get(
+                    url,
+                    headers=headers,
+                    follow_redirects=True,
+                    timeout=60.0,
                 )
-                content = out_file.read_text(encoding="utf-8").lstrip("\ufeff")
-            if content is None:
-                continue
-            content = normalize_football_data_uk(content)
-            lines = content.strip().splitlines()
-            out_file.write_text(content, encoding="utf-8")
-            total_saved += len(lines) - 1
-            print(f"  ✓ {l_name} ({s_name}): {len(lines) - 1} partidas")
+                if resp.status_code == 200 and len(resp.text.strip()) > 0:
+                    content = resp.text.lstrip("\ufeff")
+                    break
+                print(f"  ✗ {l_name} ({s_name}): status {resp.status_code}")
+            except Exception as e:
+                print(
+                    f"  ✗ Falha ao baixar {l_name} ({s_name}), "
+                    f"tentativa {attempt + 1}: {e}"
+                )
+            time.sleep(5)
+        if content is None and out_file.exists():
+            # o arquivo de uma coleta anterior pode estar na ordem do
+            # site; normalizar um arquivo já normalizado não o altera
+            print(
+                f"  ↺ {l_name} ({s_name}): "
+                "mantendo o arquivo anterior, normalizado"
+            )
+            content = out_file.read_text(encoding="utf-8").lstrip("\ufeff")
+        if content is None:
+            continue
+        content = normalize_football_data_uk(content)
+        lines = content.strip().splitlines()
+        out_file.write_text(content, encoding="utf-8")
+        total_saved += len(lines) - 1
+        print(f"  ✓ {l_name} ({s_name}): {len(lines) - 1} partidas")
 
     state.setdefault("sources", {})["football_data_uk"] = {
         "status": "success",

@@ -28,3 +28,10 @@ def test_features_tem_o_elo_calculado_antes_delas():
     texto = (gold / "03_create_table_match_features.sql").read_text()
     colunas = set(re.findall(r"\be\.(elo_\w+)", texto))
     assert colunas == {"elo_home", "elo_away", "elo_diff", "elo_p_home"}
+
+
+def test_features_tem_as_probabilidades_do_mercado():
+    texto = (SQL / "04_gold" / "03_create_table_match_features.sql").read_text()
+    colunas = set(re.findall(r"\bo\.(odds_p_\w+)", texto))
+    assert colunas == {"odds_p_home", "odds_p_draw", "odds_p_away"}
+    assert "silver.match_odds`" in texto

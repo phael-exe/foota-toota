@@ -48,6 +48,13 @@ SELECT
     e.elo_away,
     e.elo_diff,
     e.elo_p_home,
+
+    -- the market: probabilities implied by the odds, without the bookmaker margin. Closing odds
+    -- for a game already played (set before the kickoff), the newest pre-game odds for a game to
+    -- come, NULL when no bookmaker priced it yet. Same priority the model was trained with.
+    o.odds_p_home,
+    o.odds_p_draw,
+    o.odds_p_away,
     ARRAY_CONCAT(
         COALESCE(hf.season_match_ids, []),
         COALESCE(af.season_match_ids, []),
@@ -83,4 +90,29 @@ LEFT JOIN `PROJECT.gold.team_form` af
 LEFT JOIN `PROJECT.gold.h2h_form` h
        ON h.match_id = m.match_id
 LEFT JOIN `PROJECT.gold.match_elo` e
-       ON e.match_id = m.match_id;
+       ON e.match_id = m.match_id
+LEFT JOIN (
+    SELECT
+        match_id,
+        inv.h / (inv.h + inv.d + inv.a) AS odds_p_home,
+        inv.d / (inv.h + inv.d + inv.a) AS odds_p_draw,
+        inv.a / (inv.h + inv.d + inv.a) AS odds_p_away
+    FROM (
+        SELECT
+            match_id,
+            CASE
+                WHEN pinnacle_home_win > 1 AND pinnacle_draw > 1 AND pinnacle_away_win > 1
+                    THEN STRUCT(1 / pinnacle_home_win AS h, 1 / pinnacle_draw AS d,
+                                1 / pinnacle_away_win AS a)
+                WHEN market_avg_home_win > 1 AND market_avg_draw > 1 AND market_avg_away_win > 1
+                    THEN STRUCT(1 / market_avg_home_win, 1 / market_avg_draw,
+                                1 / market_avg_away_win)
+                WHEN bet365_home_win > 1 AND bet365_draw > 1 AND bet365_away_win > 1
+                    THEN STRUCT(1 / bet365_home_win, 1 / bet365_draw, 1 / bet365_away_win)
+            END AS inv
+        FROM `PROJECT.silver.match_odds`
+    )
+    WHERE inv IS NOT NULL
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY match_id) = 1
+) o
+       ON o.match_id = m.match_id;

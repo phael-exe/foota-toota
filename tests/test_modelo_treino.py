@@ -197,6 +197,16 @@ def test_candidatas_de_producao_incluem_o_modelo_atual_e_o_elo():
     assert set(treinar.ELO) <= set(treinar.CANDIDATAS["forma+elo"])
 
 
+def test_mercado_so_entra_junto_com_o_elo():
+    com_odds = [
+        nomes
+        for nomes in treinar.CANDIDATAS.values()
+        if set(treinar.ODDS) & set(nomes)
+    ]
+    assert com_odds
+    assert all("elo_diff" in nomes for nomes in com_odds)
+
+
 def test_artefatos_levam_a_lista_de_features():
     estimador, relatorio = treinar.treinar_liga(
         BSA, GOLD, lambda liga: None, **BUSCA
