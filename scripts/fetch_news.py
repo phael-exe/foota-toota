@@ -116,9 +116,8 @@ class ArticleTextExtractor(HTMLParser):
         if is_article_container:
             self.in_content = True
             self.depth += 1
-        elif self.in_content:
-            if tag in ("div", "section", "p", "blockquote"):
-                self.depth += 1
+        elif self.in_content and tag in ("div", "section", "p", "blockquote"):
+            self.depth += 1
 
     def handle_endtag(self, tag: str) -> None:
         if tag in self.skip_tags:

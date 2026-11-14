@@ -25,7 +25,8 @@ fi
 : "${GCS_BUCKET:?set GCS_BUCKET in .env}"
 BQ="${BQ_BIN:-bq}"
 if [[ "$BQ" == /* ]]; then
-    export PATH="$(dirname "$BQ"):$PATH"
+    PATH="$(dirname "$BQ"):$PATH"
+    export PATH
 fi
 
 if [ "$#" -eq 0 ]; then

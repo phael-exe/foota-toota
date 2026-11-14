@@ -26,7 +26,8 @@ fi
 GCP_REGION="${GCP_REGION:-US}"
 GCLOUD="${GCLOUD_BIN:-gcloud}"
 if [[ "$GCLOUD" == /* ]]; then
-    export PATH="$(dirname "$GCLOUD"):$PATH"
+    PATH="$(dirname "$GCLOUD"):$PATH"
+    export PATH
 fi
 
 src="${1:-$root/data/epl}"

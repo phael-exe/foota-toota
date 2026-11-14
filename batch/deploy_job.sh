@@ -65,14 +65,9 @@ commit="$(git -C "$root" rev-parse --short HEAD)"
 api="$("$GCLOUD" run services describe modelo-api --region="$REGIAO" "$project" \
     --format='value(status.url)')"
 
-# O contexto leva só o que o job roda: o .dockerignore da raiz tira o sql/, e o Cloud Build
-# usa o docker sem .dockerignore por Dockerfile
 contexto="$(mktemp -d)"
 trap 'rm -rf "$contexto"' EXIT
-cp "$root/batch/Dockerfile" "$contexto/"
-cp -r "$root/scripts" "$root/sql" "$contexto/"
-rm -rf "$contexto/sql/out"
-find "$contexto" -name __pycache__ -type d -prune -exec rm -rf {} +
+"$root/batch/contexto.sh" "$contexto"
 
 echo "=== imagem $IMAGEM ($commit)"
 "$GCLOUD" builds submit "$contexto" --tag="$IMAGEM" "$project"

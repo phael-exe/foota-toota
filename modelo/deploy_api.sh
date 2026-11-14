@@ -3,6 +3,7 @@
 # novo: o que já existe fica como está e o serviço ganha uma revisão nova.
 #
 #   modelo/deploy_api.sh
+#   MODELO_SO_DEPLOY=1 modelo/deploy_api.sh   # só imagem e revisão (o CD do GitHub Actions)
 #
 #   APIs do Cloud Run, Cloud Build, Artifact Registry e Vertex AI
 #   conta de serviço modelo-api: lê o Model Registry e o bucket dos modelos
@@ -37,27 +38,31 @@ region="--region=$MODELO_REGIAO"
 
 existe() { "$@" >/dev/null 2>&1; }
 
-echo "=== APIs"
-"$GCLOUD" services enable run.googleapis.com cloudbuild.googleapis.com \
-    artifactregistry.googleapis.com aiplatform.googleapis.com "$project"
+# A infraestrutura (APIs, conta, papéis e repositório) é de uma vez só e pede quem administra o
+# IAM; o CD só publica imagem e revisão, com uma conta sem esses poderes
+if [ "${MODELO_SO_DEPLOY:-0}" != "1" ]; then
+    echo "=== APIs"
+    "$GCLOUD" services enable run.googleapis.com cloudbuild.googleapis.com \
+        artifactregistry.googleapis.com aiplatform.googleapis.com "$project"
 
-echo "=== conta de serviço $SA"
-if ! existe "$GCLOUD" iam service-accounts describe "$SA" "$project"; then
-    "$GCLOUD" iam service-accounts create "$SERVICO" \
-        --display-name="API do modelo (Cloud Run)" "$project"
-fi
-"$GCLOUD" projects add-iam-policy-binding "$MODELO_PROJECT_ID" \
-    --member="serviceAccount:$SA" --role=roles/aiplatform.viewer \
-    --condition=None >/dev/null
-"$GCLOUD" storage buckets add-iam-policy-binding "gs://$MODELOS_BUCKET" \
-    --member="serviceAccount:$SA" --role=roles/storage.objectViewer \
-    "$project" >/dev/null
+    echo "=== conta de serviço $SA"
+    if ! existe "$GCLOUD" iam service-accounts describe "$SA" "$project"; then
+        "$GCLOUD" iam service-accounts create "$SERVICO" \
+            --display-name="API do modelo (Cloud Run)" "$project"
+    fi
+    "$GCLOUD" projects add-iam-policy-binding "$MODELO_PROJECT_ID" \
+        --member="serviceAccount:$SA" --role=roles/aiplatform.viewer \
+        --condition=None >/dev/null
+    "$GCLOUD" storage buckets add-iam-policy-binding "gs://$MODELOS_BUCKET" \
+        --member="serviceAccount:$SA" --role=roles/storage.objectViewer \
+        "$project" >/dev/null
 
-echo "=== repositório de imagens $REPOSITORIO"
-if ! existe "$GCLOUD" artifacts repositories describe "$REPOSITORIO" \
-    --location="$MODELO_REGIAO" "$project"; then
-    "$GCLOUD" artifacts repositories create "$REPOSITORIO" \
-        --repository-format=docker --location="$MODELO_REGIAO" "$project"
+    echo "=== repositório de imagens $REPOSITORIO"
+    if ! existe "$GCLOUD" artifacts repositories describe "$REPOSITORIO" \
+        --location="$MODELO_REGIAO" "$project"; then
+        "$GCLOUD" artifacts repositories create "$REPOSITORIO" \
+            --repository-format=docker --location="$MODELO_REGIAO" "$project"
+    fi
 fi
 
 echo "=== imagem $IMAGEM"

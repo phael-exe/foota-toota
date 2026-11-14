@@ -432,12 +432,48 @@ do cliente aceitam o prefixo `PITCHSIDE_` e as da aplicação o prefixo
 | `make typecheck` | Roda o `ty`. |
 | `make test` | Roda a suíte, sem os testes marcados `live`. |
 | `make test-cov` | Roda a suíte com cobertura. |
-| `make check` | Lint, tipos e testes, o mesmo que a CI. |
+| `make check` | Lint, tipos e testes, o mesmo que o primeiro job da CI. |
 | `make clean` | Esvazia o cache em disco do cliente. |
 
 As respostas HTTP nos testes são simuladas com `respx`. Um teste marcado
 com `@pytest.mark.live` só roda com `uv run pytest -m live` e exige uma
 chave válida.
+
+### CI/CD
+
+A CI ([`ci.yml`](.github/workflows/ci.yml)) roda em todo push, de qualquer
+branch, e em todo PR. Ela tem quatro jobs:
+
+- **Lint, tipos e testes:** o mesmo que o `make check`.
+- **`shellcheck`:** checa todos os scripts de shell.
+- **DAGs:** carrega os DAGs dentro da imagem do Airflow do docker compose
+  (`orquestracao/testar_dags.sh`).
+- **Imagens:** faz o build das quatro imagens que vão para o Cloud Run
+  (Job do batch, API do modelo, coletor e notícias).
+
+O deploy ([`deploy.yml`](.github/workflows/deploy.yml)) roda depois que a CI
+passa num push para a `main`, ou à mão pela aba Actions, e publica só o que
+mudou:
+
+| Mudou | Publica |
+| --- | --- |
+| `batch/`, `scripts/`, `sql/` | Cloud Run Job `foota-toota-batch` |
+| `modelo/` | Cloud Run `modelo-api` (imagem e revisão) |
+| `streaming/` | Cloud Run Job `foota-toota-coletor` |
+
+O GitHub entra no GCP sem chave de conta de serviço: o token OIDC do Actions
+vira credencial da conta `github-deployer` por Workload Identity Federation, e
+só para este repositório. A conta tem só os papéis de publicar. A
+infraestrutura (APIs, contas, IAM) segue nos `infra.sh` e no `deploy_api.sh`
+completo, rodados à mão. Para preparar uma vez:
+
+```bash
+scripts/infra_ci.sh                     # conta, federação e variáveis do repositório
+gh secret set FOOTBALLDATA_API_KEY      # a chave que o batch e o coletor usam
+```
+
+O Dataflow (Flex Template) e os DAGs na VM continuam com
+`streaming/dataflow.sh template` e `orquestracao/vm.sh enviar`.
 
 ## Licença
 
