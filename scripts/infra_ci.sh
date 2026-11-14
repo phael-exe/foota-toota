@@ -5,7 +5,8 @@
 #   - o pool de Workload Identity Federation "github", que aceita o token OIDC do GitHub Actions
 #     só deste repositório: nenhuma chave de conta de serviço sai do GCP;
 #   - com o gh logado, as variáveis do repositório que o workflow lê.
-# O segredo FOOTBALLDATA_API_KEY fica com quem tem a chave: gh secret set FOOTBALLDATA_API_KEY
+# Nenhum segredo no GitHub: a chave do Football-Data.org fica só nos Jobs do Cloud Run, e o deploy
+# do CD a mantém (batch/deploy_job.sh, streaming/deploy_coletor.sh).
 #
 #   scripts/infra_ci.sh
 set -euo pipefail
@@ -83,4 +84,3 @@ else
     echo "  GCP_WIF_PROVIDER=$provedor"
     echo "  GCP_DEPLOY_SA=$SA"
 fi
-echo "falta o segredo (uma vez): gh secret set FOOTBALLDATA_API_KEY --repo $REPO"

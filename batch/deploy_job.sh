@@ -13,7 +13,8 @@
 # parada: roda o mesmo job no mesmo horário, sem a conferência nem o aviso. Com o Airflow no ar,
 # pause-o, senão o job roda duas vezes.
 #
-# A chave do Football-Data.org vai como variável de ambiente do job, como no coletor ao vivo.
+# A chave do Football-Data.org vai como variável de ambiente do job, como no coletor ao vivo; sem
+# ela no ambiente, o job mantém a que já tem (é assim que o CD publica).
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -56,7 +57,15 @@ case "${1:-deploy}" in
         ;;
 esac
 
-: "${FOOTBALLDATA_API_KEY:?set FOOTBALLDATA_API_KEY in .env}"
+# A chave do Football-Data.org: com ela no ambiente (o .env), o deploy a grava no Job; sem ela (o
+# CD do GitHub Actions, que nunca vê a chave), o Job mantém a que já tem. Só um Job novo a exige.
+chave=""
+if [ -n "${FOOTBALLDATA_API_KEY:-}" ]; then
+    chave=",FOOTBALLDATA_API_KEY=$FOOTBALLDATA_API_KEY"
+elif ! "$GCLOUD" run jobs describe "$JOB" --region="$REGIAO" "$project" >/dev/null 2>&1; then
+    echo "o primeiro deploy de $JOB precisa de FOOTBALLDATA_API_KEY no .env" >&2
+    exit 1
+fi
 if [ -n "$(git -C "$root" status --porcelain -- scripts sql batch)" ]; then
     echo "aviso: scripts/, sql/ ou batch/ com mudanças fora de commit; a imagem leva o que está no disco" >&2
 fi
@@ -78,7 +87,7 @@ echo "=== Cloud Run Job $JOB"
 "$GCLOUD" run jobs deploy "$JOB" \
     --image="$IMAGEM" \
     --region="$REGIAO" \
-    --set-env-vars="GCP_PROJECT_ID=$GCP_PROJECT_ID,GCS_BUCKET=$GCS_BUCKET,FOOTBALLDATA_API_KEY=$FOOTBALLDATA_API_KEY,COMMIT=$commit,MODELO_API_URL=$api" \
+    --update-env-vars="GCP_PROJECT_ID=$GCP_PROJECT_ID,GCS_BUCKET=$GCS_BUCKET,COMMIT=$commit,MODELO_API_URL=$api$chave" \
     --memory=2Gi \
     --cpu=1 \
     --max-retries=0 \

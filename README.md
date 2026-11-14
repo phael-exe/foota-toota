@@ -465,11 +465,12 @@ O GitHub entra no GCP sem chave de conta de serviço: o token OIDC do Actions
 vira credencial da conta `github-deployer` por Workload Identity Federation, e
 só para este repositório. A conta tem só os papéis de publicar. A
 infraestrutura (APIs, contas, IAM) segue nos `infra.sh` e no `deploy_api.sh`
-completo, rodados à mão. Para preparar uma vez:
+completo, rodados à mão. Nenhum segredo fica no GitHub: a chave do
+Football-Data.org mora só nos Jobs do Cloud Run, e o deploy a mantém. Para
+preparar uma vez:
 
 ```bash
-scripts/infra_ci.sh                     # conta, federação e variáveis do repositório
-gh secret set FOOTBALLDATA_API_KEY      # a chave que o batch e o coletor usam
+scripts/infra_ci.sh      # conta, federação e variáveis do repositório
 ```
 
 O Dataflow (Flex Template) e os DAGs na VM continuam com

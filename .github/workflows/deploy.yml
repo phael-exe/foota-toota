@@ -10,8 +10,8 @@ name: Deploy
 # github-deployer (Workload Identity Federation), criada por scripts/infra_ci.sh. Na conta ficam
 # só os papéis de publicar; a infraestrutura (APIs, contas, IAM) segue nos infra.sh, à mão.
 #
-# Variáveis do repositório: GCP_WIF_PROVIDER, GCP_DEPLOY_SA, GCP_PROJECT_ID, GCS_BUCKET.
-# Segredo: FOOTBALLDATA_API_KEY (o batch e o coletor coletam do Football-Data.org).
+# Variáveis do repositório: GCP_WIF_PROVIDER, GCP_DEPLOY_SA, GCP_PROJECT_ID, GCS_BUCKET. Nenhum
+# segredo: a chave do Football-Data.org fica só nos Jobs do Cloud Run, e o deploy a mantém.
 on:
   workflow_run:
     workflows: [CI]
@@ -95,8 +95,6 @@ jobs:
           service_account: ${{ vars.GCP_DEPLOY_SA }}
       - uses: google-github-actions/setup-gcloud@v2
       - name: batch/deploy_job.sh
-        env:
-          FOOTBALLDATA_API_KEY: ${{ secrets.FOOTBALLDATA_API_KEY }}
         run: batch/deploy_job.sh
 
   modelo-api:
@@ -134,6 +132,4 @@ jobs:
           service_account: ${{ vars.GCP_DEPLOY_SA }}
       - uses: google-github-actions/setup-gcloud@v2
       - name: streaming/deploy_coletor.sh
-        env:
-          FOOTBALLDATA_API_KEY: ${{ secrets.FOOTBALLDATA_API_KEY }}
         run: streaming/deploy_coletor.sh
