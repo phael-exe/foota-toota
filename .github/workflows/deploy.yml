@@ -1,0 +1,135 @@
+name: Deploy
+
+# Publica no GCP o que mudou, depois que o CI passou num push para a main (o merge de um PR):
+#   batch/, scripts/ ou sql/ -> Cloud Run Job foota-toota-batch (batch/deploy_job.sh)
+#   modelo/                  -> Cloud Run modelo-api (modelo/deploy_api.sh, só imagem e revisão)
+#   streaming/               -> Cloud Run Job foota-toota-coletor (streaming/deploy_coletor.sh)
+# Ou à mão (Actions > Deploy > Run workflow), escolhendo o alvo.
+#
+# Sem chave de conta de serviço: o GitHub troca o próprio token OIDC por credenciais da conta
+# github-deployer (Workload Identity Federation), criada por scripts/infra_ci.sh. Na conta ficam
+# só os papéis de publicar; a infraestrutura (APIs, contas, IAM) segue nos infra.sh, à mão.
+#
+# Variáveis do repositório: GCP_WIF_PROVIDER, GCP_DEPLOY_SA, GCP_PROJECT_ID, GCS_BUCKET. Nenhum
+# segredo: a chave do Football-Data.org fica só nos Jobs do Cloud Run, e o deploy a mantém.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      alvo:
+        description: O que publicar
+        type: choice
+        options: [tudo, batch, modelo-api, coletor]
+        default: tudo
+
+permissions:
+  contents: read
+  id-token: write
+
+# Um deploy de cada vez, sem cancelar o que já começou
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCS_BUCKET: ${{ vars.GCS_BUCKET }}
+  REF: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+jobs:
+  alvos:
+    name: O que mudou
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    outputs:
+      batch: ${{ steps.alvos.outputs.batch }}
+      modelo: ${{ steps.alvos.outputs.modelo }}
+      coletor: ${{ steps.alvos.outputs.coletor }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.REF }}
+          fetch-depth: 2
+
+      - id: alvos
+        env:
+          EVENTO: ${{ github.event_name }}
+          ALVO: ${{ inputs.alvo }}
+        run: |
+          # No merge de um PR, o primeiro pai é a main de antes: o diff é o PR inteiro
+          mudados="$(git diff --name-only HEAD^1 HEAD)"
+          echo "$mudados"
+          alvo() {
+            if [ "$EVENTO" = workflow_dispatch ]; then
+              [ "$ALVO" = tudo ] || [ "$ALVO" = "$1" ]
+            else
+              grep -qE "$2" <<< "$mudados"
+            fi
+          }
+          for par in "batch|^(batch|scripts|sql)/" "modelo|^modelo/" "coletor|^streaming/"; do
+            nome="${par%%|*}"
+            padrao="${par#*|}"
+            [ "$nome" = modelo ] && chave=modelo-api || chave="$nome"
+            if alvo "$chave" "$padrao"; then valor=true; else valor=false; fi
+            echo "$nome=$valor" | tee -a "$GITHUB_OUTPUT"
+          done
+
+  batch:
+    name: Job do batch
+    needs: alvos
+    if: needs.alvos.outputs.batch == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.REF }}
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: batch/deploy_job.sh
+        run: batch/deploy_job.sh
+
+  modelo-api:
+    name: API do modelo
+    needs: alvos
+    if: needs.alvos.outputs.modelo == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.REF }}
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: modelo/deploy_api.sh
+        env:
+          MODELO_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          MODELO_SO_DEPLOY: "1"
+        run: modelo/deploy_api.sh
+
+  coletor:
+    name: Coletor ao vivo
+    needs: alvos
+    if: needs.alvos.outputs.coletor == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.REF }}
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: streaming/deploy_coletor.sh
+        run: streaming/deploy_coletor.sh

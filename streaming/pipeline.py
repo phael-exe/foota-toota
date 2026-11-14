@@ -5,6 +5,10 @@ Lê os eventos de partida da assinatura `eventos-dataflow`, valida e limpa cada
 um e grava em stream.partidas. O que não passa na validação, e o que o próprio
 BigQuery recusar, vai para stream.partidas_rejeitadas com o motivo.
 
+As partidas agendadas vão em lote para POST /predict/lote da API do modelo
+(--api_url) e chegam em stream.partidas já com a predição. O que não virou
+predição vai também para stream.predicoes_falhas, com o motivo.
+
   # local, com o DirectRunner
   python streaming/pipeline.py --project=pdm-bia-505511 \\
       --subscription=projects/pdm-bia-505511/subscriptions/eventos-dataflow
@@ -18,7 +22,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
+import time
+from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Any
 
 
 # Mesmos ids de liga da silver (sql/02_silver/04_create_table_matches.sql)
@@ -64,6 +72,8 @@ OBRIGATORIOS = (
 )
 
 LIMPA, REJEITADA = "limpa", "rejeitada"
+
+log = logging.getLogger("pipeline")
 
 
 class RejeicaoError(ValueError):
@@ -202,6 +212,289 @@ def recusada_pelo_bigquery(falha) -> dict:
     }
 
 
+# --- inferência -------------------------------------------------------------
+#
+# As partidas agendadas vão em lote para POST /predict/lote da API do modelo
+# (Cloud Run). A predição volta anexada à linha de stream.partidas; o que não
+# vira predição vai também para stream.predicoes_falhas, com o motivo.
+
+TENTATIVAS = 4
+ESPERA_S = 1.0
+# (conexão, leitura): a API leva ~24 s para subir do zero
+TIMEOUT_S = (5, 60)
+# O máximo de pedidos que a API aceita por chamada
+LOTE = 100
+
+COMPETICOES = {liga: codigo for codigo, liga in LIGAS.items()}
+
+COLUNAS_PREDICAO = (
+    "prediction_id",
+    "model_name",
+    "model_version",
+    "prob_home",
+    "prob_draw",
+    "prob_away",
+    "predicted_outcome",
+    "predicted_at",
+    "features_ate",
+)
+
+# Status que valem nova tentativa; 0 é timeout ou erro de conexão
+PASSAGEIROS = {0, 429, 500, 502, 503, 504}
+
+Enviar = Callable[[list[dict]], tuple[int, dict | None]]
+
+
+def precisa_predicao(linha: dict) -> bool:
+    """Só jogo ainda não iniciado: os outros são o resultado real."""
+    return linha["status"] == "scheduled"
+
+
+def pedido(linha: dict) -> dict:
+    """O pedido da API para a linha limpa. O confronto deixa a API achar a
+    partida quando a gold a guarda com o id de outra fonte."""
+    return {
+        "match_id": linha["match_id"],
+        "event_id": linha["event_id"],
+        "competition": COMPETICOES.get(linha["league_id"]),
+        "season": linha.get("season"),
+        "home_team_id": linha["home_team_id"],
+        "away_team_id": linha["away_team_id"],
+    }
+
+
+def sem_predicao(linha: dict) -> dict:
+    """A linha com as colunas de predição vazias: o schema é sempre o mesmo."""
+    return {**linha, **dict.fromkeys(COLUNAS_PREDICAO)}
+
+
+def enriquecer(linha: dict, predicao: dict) -> dict:
+    saida = {**linha, **{c: predicao.get(c) for c in COLUNAS_PREDICAO}}
+    for campo in ("predicted_at", "features_ate"):
+        if saida[campo] is not None:
+            saida[campo] = _instante(saida[campo], campo)
+    return saida
+
+
+def falha(
+    linha: dict,
+    status: int | None,
+    motivo: str,
+    tentativas: int,
+    processado_em: str,
+) -> dict:
+    """Linha de stream.predicoes_falhas."""
+    return {
+        "event_id": linha.get("event_id"),
+        "match_id": linha["match_id"],
+        "league_id": linha.get("league_id"),
+        "status": status or None,
+        "motivo": motivo,
+        "tentativas": tentativas,
+        "processed_at": processado_em,
+    }
+
+
+def _motivo_do_lote(status: int, corpo: dict | None) -> str:
+    if isinstance(corpo, dict) and corpo.get("motivo"):
+        return str(corpo["motivo"])
+    if status in (401, 403):
+        return "nao_autorizado"
+    return f"http_{status}"
+
+
+def prever_lote(
+    linhas: list[dict],
+    enviar: Enviar,
+    processado_em: str,
+    *,
+    tentativas: int = TENTATIVAS,
+    espera_s: float = ESPERA_S,
+    dormir: Callable[[float], None] = time.sleep,
+) -> tuple[list[dict], list[dict]]:
+    """(todas as linhas, na ordem, enriquecidas as que viraram predição;
+    linhas de falha). Re-tenta só os pendentes, com espera dobrando."""
+    saida = [sem_predicao(linha) for linha in linhas]
+    falhas: list[dict] = []
+    pendentes = list(range(len(linhas)))
+    ultimo: dict[int, tuple[int, str]] = {}
+
+    def desistir(i: int, status: int, motivo: str, tentativa: int) -> None:
+        falhas.append(
+            falha(linhas[i], status, motivo, tentativa, processado_em)
+        )
+
+    for tentativa in range(1, tentativas + 1):
+        if tentativa > 1:
+            dormir(espera_s * 2 ** (tentativa - 2))
+        try:
+            status, corpo = enviar([pedido(linhas[i]) for i in pendentes])
+        except Exception as erro:
+            # Um erro que o cliente não esperava não pode segurar as
+            # partidas: o Dataflow re-tentaria o lote para sempre
+            log.exception("predição: erro no cliente: %s", erro)
+            for i in pendentes:
+                desistir(i, None, "erro_cliente", tentativa)
+            pendentes = []
+            break
+        if status in PASSAGEIROS:
+            motivo = _motivo_do_lote(status, corpo)
+            ultimo = dict.fromkeys(pendentes, (status, motivo))
+            continue
+        if status != 200:
+            for i in pendentes:
+                desistir(i, status, _motivo_do_lote(status, corpo), tentativa)
+            pendentes = []
+            break
+        resultados = (
+            corpo.get("resultados") if isinstance(corpo, dict) else None
+        )
+        if not isinstance(resultados, list) or len(resultados) != len(
+            pendentes
+        ):
+            for i in pendentes:
+                desistir(i, status, "resposta_invalida", tentativa)
+            pendentes = []
+            break
+        restantes = []
+        for i, res in zip(pendentes, resultados, strict=True):
+            st = res.get("status") if isinstance(res, dict) else None
+            motivo = (res.get("motivo") if isinstance(res, dict) else None) or (
+                f"http_{st}"
+            )
+            if st == 200:
+                linha = _prevista(linhas[i], res.get("predicao"))
+                if linha is None:
+                    desistir(i, 200, "resposta_invalida", tentativa)
+                else:
+                    saida[i] = linha
+            elif st in PASSAGEIROS:
+                restantes.append(i)
+                ultimo[i] = (st, motivo)
+            elif isinstance(st, int):
+                desistir(i, st, motivo, tentativa)
+            else:
+                desistir(i, 200, "resposta_invalida", tentativa)
+        pendentes = restantes
+        if not pendentes:
+            break
+    for i in pendentes:
+        status, motivo = ultimo[i]
+        desistir(i, status, motivo, tentativas)
+    return saida, falhas
+
+
+def _prevista(linha: dict, predicao: Any) -> dict | None:
+    """A linha com a predição, ou None se a predição veio malformada (sem
+    prediction_id, ou com data que não dá para ler)."""
+    if not isinstance(predicao, dict) or not predicao.get("prediction_id"):
+        return None
+    try:
+        return enriquecer(linha, predicao)
+    except RejeicaoError:
+        return None
+
+
+def enviar_http(sessao: Any, url: str, timeout=TIMEOUT_S) -> Enviar:
+    """POST {url}/predict/lote pela sessão (autenticada no Dataflow)."""
+    import requests
+    from google.auth.exceptions import GoogleAuthError
+
+    destino = url.rstrip("/") + "/predict/lote"
+
+    def enviar(pedidos: list[dict]) -> tuple[int, dict | None]:
+        try:
+            resp = sessao.post(
+                destino, json={"pedidos": pedidos}, timeout=timeout
+            )
+        except requests.Timeout:
+            return 0, {"motivo": "timeout"}
+        except requests.RequestException:
+            # Conexão recusada ou cortada no meio da resposta
+            return 0, {"motivo": "conexao"}
+        except GoogleAuthError:
+            # O ID token não veio do metadata server
+            return 0, {"motivo": "token"}
+        try:
+            corpo = resp.json()
+        except ValueError:
+            corpo = None
+        if resp.status_code != 200 and isinstance(corpo, dict):
+            # Erro da API: {"detail": {"motivo", "mensagem"}}
+            detalhe = corpo.get("detail")
+            if isinstance(detalhe, dict):
+                corpo = detalhe
+        return resp.status_code, corpo
+
+    return enviar
+
+
+def ramo_predicao(
+    limpas: Any,
+    url: str,
+    enviar_de: Callable[[str], Enviar] | None = None,
+) -> tuple[Any, Any]:
+    """(linhas de stream.partidas, linhas de stream.predicoes_falhas).
+
+    As agendadas vão em lotes para a API; as outras passam com as colunas
+    de predição vazias. Sem `url`, nada é previsto.
+    """
+    import apache_beam as beam
+
+    if not url:
+        partidas = limpas | "Sem predição" >> beam.Map(sem_predicao)
+        falhas = limpas.pipeline | "Sem falhas" >> beam.Create([])
+        return partidas, falhas
+
+    class Prever(beam.DoFn):
+        """Um lote de linhas agendadas -> linhas previstas e falhas. A
+        sessão nasce no worker (setup), com ID token para o Cloud Run."""
+
+        def __init__(self, url: str, enviar_de) -> None:
+            self.url = url
+            self.enviar_de = enviar_de
+            self.enviar = None
+
+        def setup(self) -> None:
+            if self.enviar_de is not None:
+                self.enviar = self.enviar_de(self.url)
+                return
+            from google.auth.transport.requests import (
+                AuthorizedSession,
+                Request,
+            )
+            from google.oauth2 import id_token
+
+            # Audience = URL do serviço; a sessão renova o token sozinha
+            credenciais = id_token.fetch_id_token_credentials(
+                self.url, Request()
+            )
+            self.enviar = enviar_http(AuthorizedSession(credenciais), self.url)
+
+        def process(self, lote):
+            saida, falhas = prever_lote(list(lote), self.enviar, agora())
+            yield from saida
+            for linha in falhas:
+                yield beam.pvalue.TaggedOutput("falhas", linha)
+
+    agendadas, outras = limpas | "Agendada?" >> beam.Partition(
+        lambda linha, _n: 0 if precisa_predicao(linha) else 1, 2
+    )
+    previstas = (
+        agendadas
+        | "Lotes" >> beam.BatchElements(min_batch_size=1, max_batch_size=LOTE)
+        | "Prever"
+        >> beam.ParDo(Prever(url, enviar_de)).with_outputs(
+            "falhas", main="partidas"
+        )
+    )
+    partidas = (
+        previstas.partidas,
+        outras | "Sem predição" >> beam.Map(sem_predicao),
+    ) | "Juntar partidas" >> beam.Flatten()
+    return partidas, previstas.falhas
+
+
 def run(argv: list[str] | None = None) -> None:
     import apache_beam as beam
     from apache_beam.io.gcp.bigquery_tools import RetryStrategy
@@ -218,6 +511,11 @@ def run(argv: list[str] | None = None) -> None:
         help="projects/<projeto>/subscriptions/eventos-dataflow",
     )
     parser.add_argument("--dataset", default="stream")
+    parser.add_argument(
+        "--api_url",
+        default="",
+        help="URL da API do modelo; vazia, as partidas seguem sem predição",
+    )
     args, beam_args = parser.parse_known_args(argv)
 
     options = PipelineOptions(beam_args, streaming=True)
@@ -242,11 +540,11 @@ def run(argv: list[str] | None = None) -> None:
         | "Separar"
         >> beam.Partition(lambda r, _n: 0 if r[0] == LIMPA else 1, 2)
     )
-    resultado = (
-        limpas
-        | "Linha limpa" >> beam.Map(lambda r: r[1])
-        | gravar("partidas", f"{tabela}.partidas")
+    partidas, falhas = ramo_predicao(
+        limpas | "Linha limpa" >> beam.Map(lambda r: r[1]), args.api_url
     )
+    resultado = partidas | gravar("partidas", f"{tabela}.partidas")
+    falhas | gravar("falhas", f"{tabela}.predicoes_falhas")
     recusadas = resultado.failed_rows_with_errors | (
         "Recusadas pelo BigQuery" >> beam.Map(recusada_pelo_bigquery)
     )

@@ -13,8 +13,8 @@ API REST no Cloud Run.
 [![Ruff][ruff-badge]][ruff]
 [![pre-commit][pre-commit-badge]][pre-commit]
 
-**API do modelo em produção:** <https://modelo-api-3gvoh2dyuq-uc.a.run.app>
-([como chamar](#api-do-modelo))
+**API do modelo em produção:** <https://modelo-api-6rohqft3pa-uc.a.run.app> (privada,
+[como chamar](#api-do-modelo))
 
 ## Arquitetura
 
@@ -22,7 +22,9 @@ Dois caminhos de dados se encontram no BigQuery. O **batch** reconstrói o
 histórico de todas as fontes nas camadas bronze, silver e gold. O
 **streaming** traz cada mudança de partida do Brasileirão poucos minutos
 depois de ela acontecer. O modelo é treinado sobre a gold do batch e responde
-tanto a chamadas HTTP quanto aos eventos do stream.
+tanto a chamadas HTTP quanto aos eventos do stream. Um **Airflow** dispara os
+coletores e o gerador de eventos, liga e desliga o streaming e confere a saúde
+de tudo.
 
 ```mermaid
 flowchart LR
@@ -33,26 +35,32 @@ flowchart LR
         GLD --> PUB["bucket público<br>Parquet"]
     end
     subgraph stream ["Streaming"]
-        FDO["Football-Data.org"] --> COL["coletor<br>Cloud Run Job, a cada 5 min"]
+        FDO["Football-Data.org"] --> COL["coletor e replay<br>Cloud Run Job"]
         COL --> EVT{{"Pub/Sub: eventos"}}
         EVT -->|"assinatura BigQuery"| EBR[("stream.eventos_brutos")]
         EVT -->|"pull"| DFL["Dataflow<br>Apache Beam"]
-        DFL --> SPA[("stream.partidas")]
+        DFL --> SPA[("stream.partidas<br>evento + predição")]
         DFL --> SRJ[("stream.partidas_rejeitadas")]
+        DFL --> SFA[("stream.predicoes_falhas")]
+    end
+    subgraph orq ["Orquestração"]
+        AIR["Airflow na VM<br>coleta, batch diário, replay, saúde"]
     end
     subgraph ml ["Modelo"]
         TRN["modelo/treinar.py"] --> REG["Vertex AI<br>Model Registry"]
-        REG --> API["API no Cloud Run<br>/predict e /pubsub"]
-        API --> PRD{{"Pub/Sub: predicoes"}}
-        PRD -->|"assinatura BigQuery"| SPR[("stream.predicoes")]
+        REG --> API["API no Cloud Run<br>/predict e /predict/lote"]
     end
     PUB --> TRN
     PUB --> API
-    EVT -->|"push"| API
+    DFL -->|"POST /predict/lote<br>partidas agendadas"| API
+    AIR -->|"executa"| COL
+    AIR -->|"liga / drena"| DFL
+    AIR -.->|"/health"| API
     SIL --> UNI["gold.partidas_unificadas"]
     SPA --> UNI
     UNI --> ATU["gold.partidas_atual"]
-    SPR --> AVA["gold.predicoes_avaliadas"]
+    SPA --> PRE["gold.predicoes"]
+    PRE --> AVA["gold.predicoes_avaliadas"]
     SPA --> AVA
 ```
 
@@ -76,7 +84,8 @@ flowchart LR
    onde a API do modelo e a plataforma leem sem precisar de conta no GCP.
 
 `scripts/atualizar_partidas.sh` refaz esse caminho para as fontes de
-partidas. Um Cloud Run Job diário coleta as notícias.
+partidas e roda todo dia como o Cloud Run Job `foota-toota-batch`. Outro Cloud
+Run Job diário coleta as notícias.
 
 ### Streaming
 
@@ -87,18 +96,28 @@ minutos: consulta o Brasileirão no Football-Data.org e publica no tópico
 `replay` reproduz rodadas já jogadas, para demonstrar o fluxo a qualquer
 hora.
 
-Três assinaturas consomem o tópico:
+Duas assinaturas consomem o tópico:
 
 | Assinatura | Tipo | Destino |
 | --- | --- | --- |
 | `eventos-bigquery` | BigQuery | `stream.eventos_brutos`: cada mensagem como chegou, o bronze do stream |
-| `eventos-dataflow` | Pull | Dataflow: valida, limpa e grava em `stream.partidas`; o que for recusado vai para `stream.partidas_rejeitadas` com o motivo |
-| `eventos-api` | Push | `POST /pubsub` da API do modelo, que prevê as partidas agendadas |
+| `eventos-dataflow` | Pull | Dataflow: valida, limpa, prevê as partidas agendadas e grava em `stream.partidas`; o que for recusado vai para `stream.partidas_rejeitadas` com o motivo |
 
 O pipeline do Dataflow (`streaming/pipeline.py`) recusa eventos sem campos
 obrigatórios, com competição ou status desconhecido, com mandante igual ao
 visitante, com placar negativo ou partida encerrada sem placar. Os ids de
 liga e o status saem no mesmo formato da silver.
+
+Para cada partida **ainda não iniciada**, o pipeline chama `POST /predict/lote`
+da API do modelo, em lotes de até 100, e grava o evento já com a predição
+(`prediction_id`, probabilidades, versão do modelo, `predicted_at` e
+`features_ate`). Partidas em andamento ou encerradas seguem sem chamada: são o
+resultado real. A API é privada; os workers mandam um ID token da conta deles,
+que tem `roles/run.invoker` no serviço. Timeout, erro de conexão, 429 e 5xx
+são tentados de novo até 4 vezes, com espera de 1, 2 e 4 s; um 4xx não. A
+partida que fica sem predição chega em `stream.partidas` mesmo assim, e vai
+também para `stream.predicoes_falhas` com o motivo (`sem_campeao`,
+`fora_da_gold`, `timeout`, `nao_autorizado`...).
 
 No BigQuery, três views juntam o histórico do batch com o stream:
 
@@ -106,23 +125,47 @@ No BigQuery, três views juntam o histórico do batch com o stream:
 | --- | --- |
 | `gold.partidas_unificadas` | Partidas da silver (`origem = 'batch'`) e o último estado de cada partida do stream (`origem = 'stream'`), com os mesmos ids de clube |
 | `gold.partidas_atual` | O estado mais recente de cada partida entre batch e stream ao vivo: o que a plataforma lê |
+| `gold.predicoes` | Uma linha por predição, lida de `stream.partidas`, com `kickoff_utc` e a prova de que veio antes do jogo: `prevista_antes_do_jogo` (ao vivo) e `features_antes_do_jogo` (replay) |
 | `gold.predicoes_avaliadas` | Cada predição ao lado do resultado real, quando a partida termina, e se o modelo acertou |
 
 ### Modelo
 
 `modelo/treinar.py` treina um modelo por liga (Brasileirão e Premier League),
 um `HistGradientBoostingClassifier` do scikit-learn sobre a gold pública:
-escolhe os hiperparâmetros pela log loss em `EVAL`, retreina em
-`TRAIN + EVAL` e mede em `TEST`. Uma versão nova só é promovida se, em
+escolhe o conjunto de features (a forma recente, o Elo dos clubes com o
+descanso, e ele com as probabilidades do mercado) e os hiperparâmetros pela
+log loss em `EVAL`, retreina em `TRAIN + EVAL` e mede em `TEST`. O Elo de cada
+clube antes de cada jogo sai da gold (`gold.match_elo`), calculado só com jogos
+anteriores, e as odds dos próximos jogos entram no bronze todo dia. Com elas, o
+modelo chega às odds do mercado em `TEST`: 53,6% de acurácia no Brasileirão
+(mercado 53,3%) e 47,9% na Premier League (mercado 48,1%). Uma versão nova só é promovida se, em
 `TEST`, bater o "sempre mandante" em acurácia, as frequências do treino em log
 loss e o modelo em produção. A versão aprovada é registrada no Vertex AI
 Model Registry com o alias `campeao`, e cada execução, aprovada ou não, vira
 um run no Vertex AI Experiments.
 
-A API (`modelo/api.py`, FastAPI) carrega a versão `campeao` de cada liga e
+Tudo mora no projeto `pdm-bia-505511`: Registry, Experiments, bucket dos
+artefatos (`gs://pdm-bia-505511-modelos`) e a API. Cada versão guarda, ao lado
+do `model.joblib`, um `features.json` com as features que ela recebe, em
+ordem: um candidato com outras features entra sem mudar a API.
+
+A API (pacote `modelo/api/`, FastAPI) carrega a versão `campeao` de cada liga e
 confere a cada 10 minutos se ela mudou, então trocar o modelo não exige novo
-deploy. As predições são publicadas no tópico `predicoes`, que uma
-assinatura BigQuery grava em `stream.predicoes`.
+deploy. Uma liga sem versão `campeao` fica sem predição: nenhum modelo
+reprovado é servido.
+
+### Orquestração
+
+Um Airflow 3 numa VM (`orquestracao/`) aciona os serviços e não processa
+dados. Ele executa o coletor a cada 5 minutos e as notícias uma vez por dia.
+O `batch_diario` atualiza o batch e o bucket público às 09:00 UTC, espera a
+plataforma carregar a versão nova e avisa o time por e-mail.
+O DAG `disparar_eventos` gera os eventos da demo reproduzindo rodadas, e só
+aceita temporadas fora do treino do modelo. O `dataflow_liga_desliga` sobe o
+streaming por um Flex Template e o drena depois. O `saude` confere, a cada 15
+minutos, a API, as execuções dos Jobs, o Dataflow e o atraso entre evento e
+predição, e se o bucket público passou de 36 horas sem exportação. Toda task
+que falha grava um alerta no Cloud Logging, que vira e-mail. Detalhes em [docs/arquitetura/orquestracao.md](docs/arquitetura/orquestracao.md).
 
 ### Escolhas técnicas
 
@@ -131,7 +174,7 @@ assinatura BigQuery grava em `stream.predicoes`.
   escreve na partição do dia, e as consultas por período leem só as partições
   do intervalo. `silver.matches` é particionada pela data do jogo.
 - **Clusterização pela chave de leitura.** `stream.partidas` é clusterizada
-  por liga e partida, `stream.predicoes` por partida e `silver.matches` por
+  por liga e partida e `silver.matches` por
   liga e clubes: a página de um jogo lê poucos blocos.
 - **Bronze do stream sem código.** A assinatura BigQuery grava toda mensagem
   mesmo com o Dataflow desligado, e a assinatura do Dataflow guarda os eventos
@@ -203,8 +246,12 @@ falha (`ASSERT`) para a execução ali, e a saída de cada script fica em
 nada, se o pipeline está de pé.
 
 Para manter as partidas em dia, `scripts/atualizar_partidas.sh` coleta de
-novo o Football-Data.org e o Football-Data.co.uk, reconstrói o bronze dessas
-fontes, a silver e a gold, e reexporta as tabelas públicas.
+novo o Football-Data.org e o Football-Data.co.uk, leva as notícias do bucket
+para o bronze, reconstrói a silver e a gold e reexporta as tabelas públicas.
+`batch/deploy_job.sh` publica esse script como o Cloud Run Job
+`foota-toota-batch`, que o DAG `batch_diario` executa todo dia. O Job começa
+prevendo de novo os jogos dos próximos 7 dias (`scripts/repredizer.py`), para
+a predição que a plataforma mostra levar as odds que saíram desde a véspera.
 
 | Pasta | O que cria |
 | --- | --- |
@@ -222,10 +269,21 @@ fontes, a silver e a gold, e reexporta as tabelas públicas.
 
 ```bash
 streaming/infra.sh               # tópicos, assinaturas, dataset stream e views
-streaming/deploy_coletor.sh      # coletor no Cloud Run Job + Cloud Scheduler (5 min)
-streaming/dataflow.sh iniciar    # pipeline no Dataflow (cobra por hora)
+streaming/deploy_coletor.sh      # imagem do coletor no Cloud Run Job
+streaming/dataflow.sh template   # Flex Template do pipeline (o Airflow liga por ele)
+streaming/dataflow.sh iniciar    # ou: liga direto daqui, sem Airflow (cobra por hora)
 streaming/dataflow.sh status
 streaming/dataflow.sh parar      # drena e encerra
+```
+
+Com o Airflow (veja [orquestração](docs/arquitetura/orquestracao.md)):
+
+```bash
+orquestracao/infra.sh            # service account, firewall do IAP, alerta e aviso por e-mail
+batch/deploy_job.sh              # Job foota-toota-batch (o batch_diario executa)
+orquestracao/vm.sh criar         # VM do Airflow (uma vez)
+orquestracao/vm.sh enviar        # publica os DAGs e sobe o Airflow
+orquestracao/vm.sh tunel         # interface em http://localhost:8080
 ```
 
 Para ver o fluxo sem esperar uma rodada, reproduza rodadas já jogadas:
@@ -244,6 +302,12 @@ SELECT model_version, AVG(IF(hit, 1, 0)) AS acerto, COUNT(hit) AS partidas
 FROM gold.predicoes_avaliadas
 WHERE hit IS NOT NULL
 GROUP BY 1;
+
+-- cada predição com o horário do jogo
+SELECT match_id, predicted_at, kickoff_utc, features_ate,
+       prevista_antes_do_jogo, features_antes_do_jogo
+FROM gold.predicoes
+ORDER BY predicted_at DESC;
 ```
 
 ### Treinar e publicar o modelo
@@ -256,53 +320,52 @@ uv run --no-project --with-requirements modelo/requirements-treino.txt \
 # build da imagem (modelo/Dockerfile) e deploy no Cloud Run
 modelo/deploy_api.sh
 
-# liga a API ao stream: push dos eventos e permissão de publicar predições
-EVENTOS_PUSH_URL=<url da API>/pubsub MODELO_SA=<conta de serviço da API> \
-    streaming/infra.sh
 ```
 
-O `deploy_api.sh` imprime no fim a URL do `/pubsub` e a conta de serviço que
-vão no último comando.
+O serviço é privado: quem chama precisa de `roles/run.invoker` e de um ID
+token.
 
 ### API do modelo
 
 | Rota | O que faz |
 | --- | --- |
 | `POST /predict` | Recebe o `match_id` de uma partida (ou as features, para simular) e devolve as probabilidades de vitória do mandante, empate e vitória do visitante |
-| `POST /pubsub` | Recebe o push da assinatura `eventos-api`, prevê as partidas agendadas e publica em `predicoes` |
+| `POST /predict/lote` | Até 100 pedidos numa chamada, um resultado por pedido com o status de cada um |
 | `GET /health` | Versão do modelo e partidas carregadas de cada liga |
 
 ```bash
-curl -s https://modelo-api-3gvoh2dyuq-uc.a.run.app/health
+TOKEN=$(gcloud auth print-identity-token)
 
-curl -s -X POST https://modelo-api-3gvoh2dyuq-uc.a.run.app/predict \
-  -H 'Content-Type: application/json' \
-  -d '{"match_id": "fdorg_555052"}'
+curl -s -H "Authorization: Bearer $TOKEN" https://modelo-api-6rohqft3pa-uc.a.run.app/health
+
+curl -s -X POST https://modelo-api-6rohqft3pa-uc.a.run.app/predict \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"match_id": "fdorg_555095"}'
 ```
 
 ```json
 {
-  "prediction_id": "0836e337-f90e-4482-8d09-787fb92e8a1c",
+  "prediction_id": "e9408307-341e-59e3-a69f-74d446f11b5f",
   "event_id": null,
-  "match_id": "fdorg_555052",
+  "match_id": "fdorg_555095",
   "league_id": "brasileirao_serie_a",
   "model_name": "boosted_tree_brasileirao",
   "model_version": "1",
-  "prob_home": 0.6325,
-  "prob_draw": 0.1909,
-  "prob_away": 0.1766,
-  "predicted_outcome": "home",
-  "predicted_at": "2026-10-26T18:46:54Z"
+  "prob_home": 0.2861,
+  "prob_draw": 0.1943,
+  "prob_away": 0.5196,
+  "predicted_outcome": "away",
+  "predicted_at": "2026-11-11T19:18:59Z",
+  "features_ate": null
 }
 ```
 
-Para simular uma partida, envie as features e `"publicar": false`, que não
-publica a predição no tópico:
+Para simular uma partida, envie as features:
 
 ```bash
-curl -s -X POST https://modelo-api-3gvoh2dyuq-uc.a.run.app/predict \
-  -H 'Content-Type: application/json' \
-  -d '{"match_id": "simulada", "league_id": "brasileirao_serie_a", "publicar": false,
+curl -s -X POST https://modelo-api-6rohqft3pa-uc.a.run.app/predict \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"match_id": "simulada", "league_id": "brasileirao_serie_a",
        "features": {"home_avg_points_season": 2.3, "away_avg_points_season": 0.8,
                     "diff_avg_points_season": 1.5}}'
 ```
@@ -351,9 +414,11 @@ do cliente aceitam o prefixo `PITCHSIDE_` e as da aplicação o prefixo
 | `scripts/` | Coleta do batch, atualização das partidas e exportação pública |
 | `sql/` | Camadas bronze, silver e gold, regras de qualidade e tabelas do stream |
 | `streaming/` | Coletor, pipeline Apache Beam, infraestrutura e deploy |
+| `batch/` | Imagem e deploy do Job diário que atualiza o batch e o bucket público |
+| `orquestracao/` | Airflow: DAGs, docker compose, VM, alerta e aviso |
 | `modelo/` | API, treino, Dockerfile, SQL de avaliação e deploy no Cloud Run |
 | `src/footatoota/` | Configuração do cliente da Big Balls Data |
-| `tests/` | Testes do cliente, do streaming e do modelo |
+| `tests/` | Testes do cliente, do streaming, do modelo e da orquestração |
 | `docs/` | Contratos do pipeline, camada silver e [catálogo de 129 fontes de futebol](docs/fontes-futebol/README.md) |
 | `Dockerfile` | Imagem do job diário de notícias |
 
@@ -367,12 +432,49 @@ do cliente aceitam o prefixo `PITCHSIDE_` e as da aplicação o prefixo
 | `make typecheck` | Roda o `ty`. |
 | `make test` | Roda a suíte, sem os testes marcados `live`. |
 | `make test-cov` | Roda a suíte com cobertura. |
-| `make check` | Lint, tipos e testes, o mesmo que a CI. |
+| `make check` | Lint, tipos e testes, o mesmo que o primeiro job da CI. |
 | `make clean` | Esvazia o cache em disco do cliente. |
 
 As respostas HTTP nos testes são simuladas com `respx`. Um teste marcado
 com `@pytest.mark.live` só roda com `uv run pytest -m live` e exige uma
 chave válida.
+
+### CI/CD
+
+A CI ([`ci.yml`](.github/workflows/ci.yml)) roda em todo push, de qualquer
+branch, e em todo PR. Ela tem quatro jobs:
+
+- **Lint, tipos e testes:** o mesmo que o `make check`.
+- **`shellcheck`:** checa todos os scripts de shell.
+- **DAGs:** carrega os DAGs dentro da imagem do Airflow do docker compose
+  (`orquestracao/testar_dags.sh`).
+- **Imagens:** faz o build das quatro imagens que vão para o Cloud Run
+  (Job do batch, API do modelo, coletor e notícias).
+
+O deploy ([`deploy.yml`](.github/workflows/deploy.yml)) roda depois que a CI
+passa num push para a `main`, ou à mão pela aba Actions, e publica só o que
+mudou:
+
+| Mudou | Publica |
+| --- | --- |
+| `batch/`, `scripts/`, `sql/` | Cloud Run Job `foota-toota-batch` |
+| `modelo/` | Cloud Run `modelo-api` (imagem e revisão) |
+| `streaming/` | Cloud Run Job `foota-toota-coletor` |
+
+O GitHub entra no GCP sem chave de conta de serviço: o token OIDC do Actions
+vira credencial da conta `github-deployer` por Workload Identity Federation, e
+só para este repositório. A conta tem só os papéis de publicar. A
+infraestrutura (APIs, contas, IAM) segue nos `infra.sh` e no `deploy_api.sh`
+completo, rodados à mão. Nenhum segredo fica no GitHub: a chave do
+Football-Data.org mora só nos Jobs do Cloud Run, e o deploy a mantém. Para
+preparar uma vez:
+
+```bash
+scripts/infra_ci.sh      # conta, federação e variáveis do repositório
+```
+
+O Dataflow (Flex Template) e os DAGs na VM continuam com
+`streaming/dataflow.sh template` e `orquestracao/vm.sh enviar`.
 
 ## Licença
 

@@ -1,0 +1,24 @@
+{
+  "name": "foota-toota-partidas",
+  "description": "Eventos de partida do Pub/Sub para o BigQuery, com a predição da API do modelo nas partidas agendadas.",
+  "streaming": true,
+  "parameters": [
+    {
+      "name": "subscription",
+      "label": "Assinatura do Pub/Sub",
+      "helpText": "projects/<projeto>/subscriptions/eventos-dataflow"
+    },
+    {
+      "name": "api_url",
+      "label": "URL da API do modelo",
+      "helpText": "Vazia, as partidas seguem sem predição.",
+      "isOptional": true
+    },
+    {
+      "name": "dataset",
+      "label": "Dataset do BigQuery",
+      "helpText": "Padrão: stream.",
+      "isOptional": true
+    }
+  ]
+}

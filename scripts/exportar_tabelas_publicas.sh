@@ -4,7 +4,7 @@
 #
 #   https://storage.googleapis.com/$GCS_BUCKET/silver/<tabela>.parquet   (e .csv)
 #   https://storage.googleapis.com/$GCS_BUCKET/gold/<tabela>.parquet
-#   https://storage.googleapis.com/$GCS_BUCKET/gold/predictions.parquet  (stream.predicoes)
+#   https://storage.googleapis.com/$GCS_BUCKET/gold/predictions.parquet  (gold.predicoes_publicas)
 #   https://storage.googleapis.com/$GCS_BUCKET/_manifest.json            (data, versão e linhas por arquivo)
 #
 # Gold sai só em Parquet: as colunas *_history_match_ids são ARRAY, que o CSV não suporta.
@@ -48,8 +48,16 @@ done
 for t in "${gold[@]}"; do
     extract "gold.$t" PARQUET parquet
 done
-# As predições do tópico predicoes, no formato do contrato; vazia até o modelo publicar
-extract stream.predicoes PARQUET parquet gold/predictions
+# As predições (gold.predicoes_publicas: uma por jogo, no match_id da silver, que é o que a
+# plataforma cruza, e com a prova de "antes do jogo").
+# O bq extract não lê view: a consulta vai antes para uma tabela de passagem, que expira.
+echo "=== gold.predicoes_publicas -> stream.predicoes_exportacao"
+"$BQ" --project_id="$GCP_PROJECT_ID" query --use_legacy_sql=false --replace \
+    --destination_table="$GCP_PROJECT_ID:stream.predicoes_exportacao" \
+    "SELECT * FROM \`$GCP_PROJECT_ID.gold.predicoes_publicas\`" >/dev/null
+"$BQ" --project_id="$GCP_PROJECT_ID" update --expiration=86400 \
+    "$GCP_PROJECT_ID:stream.predicoes_exportacao" >/dev/null
+extract stream.predicoes_exportacao PARQUET parquet gold/predictions
 
 # Sem cache no CDN público, para uma reexportação aparecer na hora
 echo "=== cache-control: no-cache"
@@ -68,7 +76,9 @@ counts="$("$BQ" --project_id="$GCP_PROJECT_ID" --format=json query --use_legacy_
      UNION ALL SELECT CONCAT(dataset_id, '.', table_id), row_count FROM \`$GCP_PROJECT_ID.gold.__TABLES__\`
      UNION ALL SELECT CONCAT(dataset_id, '.', table_id), row_count FROM \`$GCP_PROJECT_ID.stream.__TABLES__\`")"
 manifest="$(mktemp)"
-python3 - "$counts" "$(git -C "$root" rev-parse --short HEAD 2>/dev/null || echo unknown)" \
+# COMMIT vem do deploy no Cloud Run Job, onde não há .git
+commit="${COMMIT:-$(git -C "$root" rev-parse --short HEAD 2>/dev/null || echo unknown)}"
+python3 - "$counts" "$commit" \
     "${exported[@]}" > "$manifest" <<'PY'
 import json
 import sys

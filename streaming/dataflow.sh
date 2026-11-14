@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Liga e desliga o pipeline de streaming (streaming/pipeline.py) no Dataflow.
+# Liga e desliga o pipeline de streaming (streaming/pipeline.py) no Dataflow. Ao ligar,
+# passa a URL da API do modelo (modelo-api) e deixa os workers chamarem a API.
 #
 #   streaming/dataflow.sh iniciar
 #   streaming/dataflow.sh parar     # drena: termina o que já leu e encerra
 #   streaming/dataflow.sh status
+#   streaming/dataflow.sh template  # publica o Flex Template que o Airflow usa para ligar o job
 #
 # O job cobra por hora enquanto roda (1 worker n1-standard-1): desligue depois da demo. Desligado,
 # os eventos esperam na assinatura eventos-dataflow (até 7 dias) e continuam caindo em
@@ -24,6 +26,8 @@ STREAM_BUCKET="${STREAM_BUCKET:-foota-toota-505511-stream}"
 STREAM_REGION="${STREAM_REGION:-us-central1}"
 GCLOUD="${GCLOUD_BIN:-gcloud}"
 JOB="foota-toota-partidas"
+MODELO_REGIAO="${MODELO_REGIAO:-us-central1}"
+API="modelo-api"
 # As bibliotecas do Google cobram cota do projeto do ADC local, que pode ser outro
 export GOOGLE_CLOUD_QUOTA_PROJECT="$GCP_PROJECT_ID"
 venv="$root/streaming/.venv"
@@ -43,7 +47,21 @@ case "${1:-}" in
             uv venv "$venv" --python 3.12 --seed
             uv pip install --python "$venv/bin/python" -r "$root/streaming/requirements-pipeline.txt"
         fi
+        # As partidas agendadas são previstas pela API do modelo (Cloud Run
+        # privado): a conta dos workers (a padrão do Compute) pode chamá-la
+        api_url="$("$GCLOUD" run services describe "$API" --region="$MODELO_REGIAO" \
+            --project="$GCP_PROJECT_ID" --format='value(status.url)' 2>/dev/null || true)"
+        if [ -n "$api_url" ]; then
+            numero="$("$GCLOUD" projects describe "$GCP_PROJECT_ID" --format='value(projectNumber)')"
+            "$GCLOUD" run services add-iam-policy-binding "$API" --region="$MODELO_REGIAO" \
+                --member="serviceAccount:$numero-compute@developer.gserviceaccount.com" \
+                --role=roles/run.invoker --project="$GCP_PROJECT_ID" >/dev/null
+            echo "predições pela API: $api_url"
+        else
+            echo "aviso: serviço $API não encontrado; as partidas seguem sem predição" >&2
+        fi
         "$venv/bin/python" "$root/streaming/pipeline.py" \
+            --api_url="$api_url" \
             --runner=DataflowRunner \
             --project="$GCP_PROJECT_ID" \
             --region="$STREAM_REGION" \
@@ -66,12 +84,31 @@ case "${1:-}" in
         fi
         "$GCLOUD" dataflow jobs drain "$id" --project="$GCP_PROJECT_ID" --region="$STREAM_REGION"
         ;;
+    template)
+        # Mesmo pipeline, empacotado para ser lançado sem o Beam local (DAG
+        # dataflow_liga_desliga do Airflow)
+        imagem="gcr.io/$GCP_PROJECT_ID/$JOB-template:latest"
+        # Build local: a imagem base do launcher tem camadas zstd, que o Docker
+        # do Cloud Build não abre. O login no registry vale só para este push.
+        docker build --platform=linux/amd64 -f "$root/streaming/Dockerfile.template" \
+            -t "$imagem" "$root/streaming"
+        docker_config="$(mktemp -d)"
+        trap 'rm -rf "$docker_config"' EXIT
+        "$GCLOUD" auth print-access-token |
+            DOCKER_CONFIG="$docker_config" docker login -u oauth2accesstoken --password-stdin https://gcr.io
+        DOCKER_CONFIG="$docker_config" docker push "$imagem"
+        "$GCLOUD" dataflow flex-template build "gs://$STREAM_BUCKET/dataflow/templates/partidas.json" \
+            --image="$imagem" \
+            --sdk-language=PYTHON \
+            --metadata-file="$root/streaming/template_metadata.json" \
+            --project="$GCP_PROJECT_ID"
+        ;;
     status)
         "$GCLOUD" dataflow jobs list --project="$GCP_PROJECT_ID" --region="$STREAM_REGION" \
             --filter="name=$JOB" --limit=3
         ;;
     *)
-        echo "uso: $0 iniciar|parar|status" >&2
+        echo "uso: $0 iniciar|parar|status|template" >&2
         exit 2
         ;;
 esac

@@ -3,6 +3,11 @@
 Roteiro da demonstração do modelo: `/predict` ao vivo, o stream gravando predição x real, e o
 ciclo de MLOps no Vertex AI. Contrato e arquitetura: [`contratos.md`](contratos.md).
 
+> **Roteiro antigo.** Descreve a versão em que o Pub/Sub entregava os eventos à API por push
+> (`eventos-api`) e a API publicava no tópico `predicoes`, num projeto separado. Hoje a API fica
+> no `pdm-bia-505511`, é privada, e quem a chama é o Dataflow, que grava a predição em
+> `stream.partidas` (veja a seção 3 de [`contratos.md`](contratos.md)).
+
 API: `https://modelo-api-3gvoh2dyuq-uc.a.run.app` (Cloud Run `modelo-api`, projeto `pdm-andre-2026`).
 
 ## Antes da demonstração
@@ -110,33 +115,44 @@ com um de-para de clubes tirado do bronze, e grava tudo com o `match_id` do even
 
 ## 3. MLOps: Registry, Experiments e a regra de promoção
 
-- **Model Registry:** `boosted_tree_brasileirao` e `boosted_tree_epl`, versão 1 com o alias
-  `campeao`. A API serve a versão que tem o alias e confere a cada 10 minutos: promover outra versão
+- **Model Registry:** `boosted_tree_brasileirao` e `boosted_tree_epl`, versão 3 com o alias
+  `campeao` (as versões 1, só com a forma, e 2, com o Elo, seguem registradas). A API serve a versão que tem o alias e confere a cada 10 minutos: promover outra versão
   é mover o alias, sem novo deploy.
-- **Experiments** (`foota-toota-resultado`): um run por liga e execução. Dois aprovados (a versão 1)
-  e dois reprovados: o retreino nos mesmos dados empatou com o campeão, e empate não promove.
-- **A regra** (`modelo/treinar.py`): hiperparâmetros escolhidos em EVAL, retreino em TRAIN + EVAL,
+- **Experiments** (`foota-toota-resultado`): um run por liga e execução, aprovado ou não. Cada run
+  guarda a log loss em EVAL de cada conjunto de features e qual ficou.
+- **A regra** (`modelo/treinar.py`): conjunto de features e hiperparâmetros escolhidos em EVAL, retreino em TRAIN + EVAL,
   medida em TEST, que não entra em nenhuma escolha. Só vira campeão quem bate, em TEST, o "sempre
   mandante" (acurácia), as frequências do treino (log loss) e o campeão atual nas mesmas partidas.
 - Treinar de novo leva uns 9 minutos: não é para a hora. Se quiserem ver, o comando é
   `uv run --no-project --with-requirements modelo/requirements-treino.txt python modelo/treinar.py`.
 
-### Números (TEST, versão 1)
+### Números (TEST, versão 3)
+
+A versão 3 junta ao Elo e ao descanso as probabilidades do mercado (`odds_p_home`, `odds_p_draw`,
+`odds_p_away`, as odds sem a margem da casa). Em EVAL, esse conjunto teve a menor log loss nas duas
+ligas. O mercado nunca entra sozinho: a API prevê jogos semanas antes de haver odds, e aí as árvores
+seguem pelo Elo (o treino tem jogos com e sem odds). As odds dos próximos jogos saem 2 a 4 dias
+antes, e a repredição diária do Job do batch (`scripts/repredizer.py`) leva a predição com elas até
+a plataforma.
 
 | | Brasileirão | Premier League |
 | --- | --- | --- |
-| Partidas | 669 | 407 |
-| Acurácia do modelo | 50,1% | 45,0% |
-| Sempre mandante | 49,3% | 41,5% |
-| Log loss do modelo | 1,012 | 1,060 |
-| Log loss das frequências | 1,044 | 1,093 |
+| Partidas | 709 | 480 |
+| Acurácia, versão 3 | 53,6% | 47,9% |
+| Acurácia, versão 2 (Elo) | 51,3% | 47,9% |
+| Acurácia, versão 1 (forma) | 51,2% | 44,2% |
+| Sempre mandante | 49,8% | 41,9% |
+| Log loss, versão 3 | 0,976 | 1,024 |
+| Log loss, versão 2 | 1,002 | 1,046 |
+| Log loss, versão 1 | 1,007 | 1,059 |
+| Log loss das frequências | 1,041 | 1,089 |
+| Odds do mercado sozinhas (acurácia / log loss) | 53,3% / 0,978 | 48,1% / 1,023 |
 
-No Brasileirão a acurácia passa o "sempre mandante" por menos de um ponto, dentro do ruído para 669
-partidas; o ganho que conta é a log loss, a qualidade das probabilidades que a plataforma mostra. Na
-EPL o ganho aparece nas duas medidas. Empate quase nunca é o resultado mais provável: o modelo do
-Brasileirão aponta empate em 10 das partidas de TEST (e o mandante em umas 625), o da EPL em
-nenhuma, como no antigo modelo do BigQuery ML. A probabilidade de empate está na resposta, só
-raramente é a maior.
+No Brasileirão a versão 3 passa o mercado nas duas medidas; na Premier League empata com ele (um
+jogo de 480 na acurácia). Duas ressalvas: no TEST do Brasileirão as odds são as de fechamento, as
+únicas que o arquivo histórico tem, e os próximos jogos usam as de antes do jogo, um pouco menos
+precisas; e um jogo previsto antes de sair qualquer odd fica com a qualidade da versão 2 até a
+repredição. Empate quase nunca é o resultado mais provável, nem para o mercado.
 
 ## Se algo falhar
 

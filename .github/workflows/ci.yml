@@ -1,12 +1,22 @@
 name: CI
 
+# Todo push, em qualquer branch, e todo PR: o trabalho acontece fora da main (trabalho-final) e
+# precisa do mesmo crivo. Um push novo na mesma branch cancela a verificação anterior.
 on:
   push:
-    branches: [main]
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   check:
+    name: Lint, tipos e testes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -28,3 +38,52 @@ jobs:
 
       - name: Test
         run: uv run pytest --cov
+
+  scripts:
+    name: Scripts de shell
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # O shellcheck já vem na imagem do runner
+      - name: shellcheck
+        run: git ls-files -z '*.sh' | xargs -0 shellcheck -S warning
+
+  dags:
+    name: DAGs no Airflow
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # Carrega os DAGs dentro da imagem do Airflow do docker-compose e roda orquestracao/tests:
+      # import, dependências entre tasks, alerta em toda task
+      - name: Integridade dos DAGs
+        run: orquestracao/testar_dags.sh
+
+  imagens:
+    name: Imagem ${{ matrix.nome }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - nome: batch
+          - nome: modelo-api
+            contexto: modelo
+          - nome: coletor
+            contexto: streaming
+          - nome: noticias
+            contexto: .
+    steps:
+      - uses: actions/checkout@v5
+
+      # As imagens que o CD publica precisam construir; nada vai para o registro aqui
+      - name: Build
+        run: |
+          if [ "${{ matrix.nome }}" = "batch" ]; then
+            contexto="$(mktemp -d)"
+            batch/contexto.sh "$contexto"
+          else
+            contexto="${{ matrix.contexto }}"
+          fi
+          docker build --tag "foota-toota-${{ matrix.nome }}:ci" "$contexto"

@@ -16,7 +16,8 @@ WITH raw_news AS (
         SAFE_CAST(character_count AS INT64) AS character_count,
         COALESCE(
             SAFE_CAST(published_at AS TIMESTAMP),
-            SAFE.PARSE_TIMESTAMP('%Y-%m-%dT%H:%M:%E*SZ', published_at),
+            -- the external table autodetects the type: STRING or TIMESTAMP, by the files
+            SAFE.PARSE_TIMESTAMP('%Y-%m-%dT%H:%M:%E*SZ', CAST(published_at AS STRING)),
             SAFE.PARSE_TIMESTAMP('%a, %d %b %Y %H:%M:%S %Z', pub_date_raw)
         ) AS published_at,
         `PROJECT.silver.blank_to_null`(source) AS source,

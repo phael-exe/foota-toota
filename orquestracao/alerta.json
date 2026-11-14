@@ -1,0 +1,24 @@
+{
+  "displayName": "foota-toota: falha no Airflow",
+  "documentation": {
+    "content": "Uma task do Airflow falhou: ${log.extracted_label.mensagem}\n\nDetalhes no log `foota-toota-alertas` e na interface do Airflow (`orquestracao/vm.sh tunel`).",
+    "mimeType": "text/markdown"
+  },
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "task do Airflow falhou",
+      "conditionMatchedLog": {
+        "filter": "logName=\"projects/PROJECT/logs/foota-toota-alertas\" AND severity>=ERROR",
+        "labelExtractors": {
+          "mensagem": "EXTRACT(jsonPayload.mensagem)"
+        }
+      }
+    }
+  ],
+  "alertStrategy": {
+    "notificationRateLimit": { "period": "300s" },
+    "autoClose": "1800s"
+  },
+  "notificationChannels": CANAIS
+}

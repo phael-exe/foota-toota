@@ -84,3 +84,14 @@ branch = true
 [tool.coverage.report]
 show_missing = true
 exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
+
+[tool.ty.environment]
+# os testes importam a API do modelo e os módulos dos DAGs pelo caminho
+extra-paths = ["modelo", "orquestracao/dags"]
+
+[[tool.ty.overrides]]
+# o Beam só existe no ambiente do pipeline; o teste é pulado sem ele
+include = ["tests/test_streaming_beam.py"]
+
+[tool.ty.overrides.rules]
+unresolved-import = "ignore"

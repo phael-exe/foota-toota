@@ -208,6 +208,13 @@ def replay(args, publicar: Publicar) -> None:
     linhas = (_ler(args.arquivo) or "").splitlines()
     partidas = [json.loads(linha) for linha in linhas if linha.strip()]
     eventos = linha_do_tempo(partidas, args.temporada, args.rodadas)
+    if not eventos:
+        # sem isso o Job termina "com sucesso" e a demo fica parada sem aviso
+        rodadas = ",".join(map(str, sorted(args.rodadas or []))) or "todas"
+        sys.exit(
+            f"replay: nenhuma partida em {args.arquivo} para a temporada "
+            f"{args.temporada or 'qualquer'} e as rodadas {rodadas}"
+        )
     sufixo = "replay-" + datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     _log(f"replay: {len(eventos)} eventos, 1 a cada {args.intervalo}s")
     for i, partida in enumerate(eventos, 1):

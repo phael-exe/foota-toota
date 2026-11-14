@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import math
 import random
 import sys
@@ -23,7 +24,10 @@ def _modulo(nome: str):
     return modulo
 
 
-api = _modulo("api")
+sys.path.insert(0, str(MODELO))
+import api  # noqa: E402
+
+
 treinar = _modulo("treinar")
 
 BSA = api.LIGAS["brasileirao_serie_a"]
@@ -126,7 +130,7 @@ def test_decidir(modelo, campeao, reprovacoes):
 
 def test_treinar_liga_aprova_modelo_que_bate_baselines_e_campeao():
     estimador, relatorio = treinar.treinar_liga(
-        BSA, GOLD, lambda liga: ("1", Uniforme()), **BUSCA
+        BSA, GOLD, lambda liga: ("1", Uniforme(), api.FEATURES), **BUSCA
     )
 
     assert api.validar(estimador) is estimador
@@ -142,12 +146,76 @@ def test_treinar_liga_reprova_quem_nao_bate_o_campeao():
     campeao, _ = treinar.treinar_liga(BSA, GOLD, lambda liga: None, **BUSCA)
 
     _, relatorio = treinar.treinar_liga(
-        BSA, GOLD, lambda liga: ("4", campeao), **BUSCA
+        BSA, GOLD, lambda liga: ("4", campeao, api.FEATURES), **BUSCA
     )
 
     # O mesmo modelo empata com o campeão: empate não promove
     assert not relatorio["aprovado"]
     assert "campeão" in relatorio["motivos"][0]
+
+
+def test_campeao_e_avaliado_com_as_features_dele():
+    class DuasFeatures(Uniforme):
+        def __init__(self) -> None:
+            self.larguras: list = []
+
+        def predict_proba(self, x):
+            self.larguras += [len(linha) for linha in x]
+            return super().predict_proba(x)
+
+    campeao = DuasFeatures()
+    nomes = ("home_rest_days", "away_rest_days")
+
+    treinar.treinar_liga(BSA, GOLD, lambda liga: ("1", campeao, nomes), **BUSCA)
+
+    assert campeao.larguras and set(campeao.larguras) == {2}
+
+
+def test_escolhe_as_features_pela_log_loss_em_eval():
+    # Nas linhas de teste, só diff_avg_points_season decide o resultado; o
+    # descanso é constante e não ensina nada
+    candidatas = {
+        "descanso": ("home_rest_days", "away_rest_days"),
+        "forca": ("diff_avg_points_season", "home_rest_days"),
+    }
+
+    estimador, relatorio = treinar.treinar_liga(
+        BSA, GOLD, lambda liga: None, candidatas=candidatas, **BUSCA
+    )
+
+    assert relatorio["conjunto"] == "forca"
+    assert relatorio["features"] == list(candidatas["forca"])
+    perdas = relatorio["candidatas"]
+    assert set(perdas) == {"descanso", "forca"}
+    assert perdas["forca"] < perdas["descanso"]
+    assert relatorio["log_loss_eval"] == perdas["forca"]
+    assert api.validar(estimador, candidatas["forca"]) is estimador
+
+
+def test_candidatas_de_producao_incluem_o_modelo_atual_e_o_elo():
+    assert treinar.CANDIDATAS["forma"] == api.FEATURES
+    assert set(treinar.ELO) <= set(treinar.CANDIDATAS["forma+elo"])
+
+
+def test_mercado_so_entra_junto_com_o_elo():
+    com_odds = [
+        nomes
+        for nomes in treinar.CANDIDATAS.values()
+        if set(treinar.ODDS) & set(nomes)
+    ]
+    assert com_odds
+    assert all("elo_diff" in nomes for nomes in com_odds)
+
+
+def test_artefatos_levam_a_lista_de_features():
+    estimador, relatorio = treinar.treinar_liga(
+        BSA, GOLD, lambda liga: None, **BUSCA
+    )
+
+    arquivos = treinar.artefatos(estimador, relatorio)
+
+    assert json.loads(arquivos["features.json"]) == list(api.FEATURES)
+    assert {"model.joblib", "metricas.json"} <= set(arquivos)
 
 
 # --- Registry ---------------------------------------------------------------
@@ -179,7 +247,8 @@ class Sessao:
                 return resposta() if callable(resposta) else resposta
         return Resposta(status=404)
 
-    def get(self, url, params=None):
+    def get(self, url, params=None, timeout=None):
+        assert timeout is not None, f"GET sem timeout: {url}"
         self.chamadas.append(("GET", url, params))
         return self._responder(url)
 
@@ -279,6 +348,46 @@ def test_modelo_atual_so_tolera_falha_no_modo_sem_registrar():
         treinar.modelo_atual(Quebrado())(BSA)
 
 
+def test_registry_sem_alias_campeao_nao_cai_no_default():
+    reg, _ = registry(
+        {
+            "@campeao": Resposta(status=404),
+            "@default": Resposta({"versionId": "1", "artifactUri": "gs://b/"}),
+            "/models": Resposta({"models": [{"name": PAI}]}),
+        }
+    )
+
+    with pytest.raises(api.SemCampeaoError):
+        reg.versao("boosted_tree_epl")
+
+
+def test_registry_sem_o_modelo_nao_tem_campeao():
+    reg, _ = registry({"/models": Resposta({"models": []})})
+
+    with pytest.raises(api.SemCampeaoError):
+        reg.versao("boosted_tree_epl")
+
+
+def test_modelo_atual_nao_ignora_campeao_com_features_json_quebrado():
+    class Quebrado:
+        def versao(self, nome):
+            return "1", "gs://b/x/"
+
+        def carregar(self, uri):
+            raise api.SemModeloError("features.json precisa ser uma lista")
+
+    with pytest.raises(api.SemModeloError):
+        treinar.modelo_atual(Quebrado())(BSA)
+
+
+def test_modelo_atual_sem_campeao_compara_so_com_os_baselines():
+    class Vazio:
+        def versao(self, nome):
+            raise api.SemCampeaoError("sem alias")
+
+    assert treinar.modelo_atual(Vazio())(BSA) is None
+
+
 # --- Experiments ------------------------------------------------------------
 
 
@@ -286,7 +395,9 @@ def _relatorio(campeao: bool = True) -> dict:
     _, relatorio = treinar.treinar_liga(
         BSA,
         GOLD,
-        (lambda liga: ("1", Uniforme())) if campeao else (lambda liga: None),
+        (lambda liga: ("1", Uniforme(), api.FEATURES))
+        if campeao
+        else (lambda liga: None),
         **BUSCA,
     )
     relatorio["execucao"] = "20261019t051751z"

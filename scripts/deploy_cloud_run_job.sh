@@ -14,7 +14,8 @@ fi
 
 GCLOUD="${GCLOUD_BIN:-gcloud}"
 if [[ "$GCLOUD" == /* ]]; then
-    export PATH="$(dirname "$GCLOUD"):$PATH"
+    PATH="$(dirname "$GCLOUD"):$PATH"
+    export PATH
 fi
 
 PROJECT_ID="${GCP_PROJECT_ID:?GCP_PROJECT_ID não definido no .env}"

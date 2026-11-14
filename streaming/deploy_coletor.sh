@@ -7,8 +7,11 @@
 #   streaming/deploy_coletor.sh pausar     # para de coletar (o job continua lá)
 #   streaming/deploy_coletor.sh retomar
 #
+# Com o Airflow no ar (orquestracao/), quem agenda é o DAG coleta_ao_vivo e este agendamento fica
+# pausado; `retomar` é o plano B com a VM parada.
+#
 # A chave do Football-Data.org vai como variável de ambiente do job, visível para quem tem acesso
-# ao Cloud Run do projeto.
+# ao Cloud Run do projeto. Sem ela no ambiente, o job mantém a que já tem (é assim que o CD publica).
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -21,7 +24,6 @@ if [ -f "$root/.env" ]; then
 fi
 
 : "${GCP_PROJECT_ID:?set GCP_PROJECT_ID in .env}"
-: "${FOOTBALLDATA_API_KEY:?set FOOTBALLDATA_API_KEY in .env}"
 STREAM_BUCKET="${STREAM_BUCKET:-foota-toota-505511-stream}"
 STREAM_REGION="${STREAM_REGION:-us-central1}"
 GCLOUD="${GCLOUD_BIN:-gcloud}"
@@ -47,6 +49,16 @@ case "${1:-deploy}" in
         ;;
 esac
 
+# A chave do Football-Data.org: com ela no ambiente (o .env), o deploy a grava no Job; sem ela (o
+# CD do GitHub Actions, que nunca vê a chave), o Job mantém a que já tem. Só um Job novo a exige.
+chave=""
+if [ -n "${FOOTBALLDATA_API_KEY:-}" ]; then
+    chave=",FOOTBALLDATA_API_KEY=$FOOTBALLDATA_API_KEY"
+elif ! "$GCLOUD" run jobs describe "$JOB" --region="$STREAM_REGION" "$project" >/dev/null 2>&1; then
+    echo "o primeiro deploy de $JOB precisa de FOOTBALLDATA_API_KEY no .env" >&2
+    exit 1
+fi
+
 echo "=== imagem $IMAGEM"
 "$GCLOUD" builds submit "$root/streaming" --tag="$IMAGEM" "$project"
 
@@ -54,7 +66,7 @@ echo "=== Cloud Run Job $JOB"
 "$GCLOUD" run jobs deploy "$JOB" \
     --image="$IMAGEM" \
     --region="$STREAM_REGION" \
-    --set-env-vars="GCP_PROJECT_ID=$GCP_PROJECT_ID,STREAM_BUCKET=$STREAM_BUCKET,FOOTBALLDATA_API_KEY=$FOOTBALLDATA_API_KEY" \
+    --update-env-vars="GCP_PROJECT_ID=$GCP_PROJECT_ID,STREAM_BUCKET=$STREAM_BUCKET$chave" \
     --memory=512Mi \
     --cpu=1 \
     --max-retries=1 \

@@ -1,0 +1,20 @@
+# Para rodar na máquina de quem desenvolve: usa o ADC local (gcloud auth application-default
+# login) no lugar da service account da VM. AIRFLOW_UID=$(id -u) no .env deixa o container ler
+# o arquivo do ADC.
+#
+#   docker compose -f docker-compose.yaml -f docker-compose.local.yaml up -d
+x-local: &local
+  volumes:
+    - ./dags:/opt/airflow/dags:ro
+    - ./senhas:/opt/airflow/senhas
+    - logs:/opt/airflow/logs
+    - ${HOME}/.config/gcloud:/home/airflow/.config/gcloud:ro
+  environment:
+    CLOUDSDK_CONFIG: /home/airflow/.config/gcloud
+    GOOGLE_APPLICATION_CREDENTIALS: /home/airflow/.config/gcloud/application_default_credentials.json
+    GOOGLE_CLOUD_QUOTA_PROJECT: pdm-bia-505511
+
+services:
+  airflow-apiserver: *local
+  airflow-scheduler: *local
+  airflow-dag-processor: *local

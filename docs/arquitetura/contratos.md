@@ -7,47 +7,42 @@ mudar, muda primeiro aqui.
 
 | Quem | Responsável por |
 | --- | --- |
-| Raphael | coletor, tópicos e assinaturas, Dataflow, tabelas `stream.*` e views da gold |
-| André | modelo no Vertex AI Model Registry e API no Cloud Run (`/predict` e `/pubsub`) |
-| Wagner | plataforma: recebe as predições por push e lê o histórico no BigQuery |
+| Raphael | coletor, tópicos e assinaturas, Dataflow (que chama a API), tabelas `stream.*` e views da gold |
+| André | modelo no Vertex AI Model Registry e API no Cloud Run (`/predict` e `/predict/lote`) |
+| Wagner | plataforma: lê partidas e predições no BigQuery ou nos Parquet públicos |
 
 ## 1. Onde fica cada coisa
 
-Tudo do pipeline mora no projeto **`pdm-bia-505511`**. BigQuery na multi-região `US`; Pub/Sub,
-Dataflow, Cloud Run e Scheduler em **`us-central1`**. A API do André e o backend do Wagner podem
-ficar nos projetos de vocês: a conversa com o pipeline é só por HTTP (push do Pub/Sub) e por
-leitura no BigQuery.
+Tudo do pipeline mora no projeto **`pdm-bia-505511`**, inclusive a API do modelo. BigQuery na
+multi-região `US`; Pub/Sub, Dataflow, Cloud Run e Scheduler em **`us-central1`**. A plataforma
+conversa com o pipeline lendo o BigQuery (ou os Parquet públicos).
 
 ```
 Football-Data.org ──> coletor (Cloud Run Job, a cada 5 min) ──> tópico eventos
                                                                    ├─ eventos-bigquery ──> stream.eventos_brutos   (bronze do stream)
-                                                                   ├─ eventos-dataflow ──> Dataflow ──> stream.partidas  (silver do stream)
-                                                                   │                                └─> stream.partidas_rejeitadas
-                                                                   └─ eventos-api (push) ──> API do André  POST /pubsub
-                                                                                                │ publica
-curl / Postman ──> API do André  POST /predict                                                  v
-                                                                                           tópico predicoes
-                                                                   ├─ predicoes-bigquery ──> stream.predicoes  (falhas -> predicoes-dlq)
-                                                                   └─ predicoes-plataforma (push) ──> backend do Wagner
+                                                                   └─ eventos-dataflow ──> Dataflow ──> stream.partidas  (evento + predição)
+                                                                                              │  ^     ├─> stream.partidas_rejeitadas
+                                                     partidas agendadas, POST /predict/lote   │  │     └─> stream.predicoes_falhas
+                                                                                              v  │
+curl / Postman ──────────────────────────────────────────────────────────> API do modelo (Cloud Run, privada)
+
+stream.partidas ──> gold.predicoes ──> gold.predicoes_avaliadas
 ```
 
 | Recurso | Nome | Para quê |
 | --- | --- | --- |
 | Tópico | `eventos` | Eventos de partida (seção 2) |
-| Tópico | `predicoes` | Predições do modelo (seção 3) |
-| Tópico | `predicoes-dlq` | Predições que o BigQuery recusou 5 vezes |
+| Tópico | `predicoes` | Histórico: a API publicava aqui antes de o Dataflow chamá-la. Nada novo chega |
 | Assinatura | `eventos-dataflow` | Pull, consumida pelo Dataflow |
 | Assinatura | `eventos-bigquery` | Grava o evento bruto em `stream.eventos_brutos` |
-| Assinatura | `eventos-api` | Push para `POST /pubsub` da API do modelo |
-| Assinatura | `predicoes-bigquery` | Grava a predição em `stream.predicoes` |
-| Assinatura | `predicoes-plataforma` | Push para o backend do Wagner (criada quando a URL existir) |
-| Assinatura | `predicoes-dlq-sub` | Pull, para inspecionar predições recusadas |
 | Tabela | `stream.eventos_brutos` | Toda mensagem de `eventos` como chegou |
-| Tabela | `stream.partidas` | Eventos validados pelo Dataflow, um por mudança de partida |
+| Tabela | `stream.partidas` | Eventos validados pelo Dataflow, um por mudança de partida; os agendados com a predição |
 | Tabela | `stream.partidas_rejeitadas` | Eventos recusados e o motivo |
-| Tabela | `stream.predicoes` | Histórico de predições |
+| Tabela | `stream.predicoes_falhas` | Partidas agendadas que ficaram sem predição e o motivo |
+| Tabela | `stream.predicoes` | Histórico das predições do tópico `predicoes` |
 | View | `gold.partidas_unificadas` | Batch (silver) e stream lado a lado, coluna `origem` |
 | View | `gold.partidas_atual` | Estado atual de cada partida: o que a plataforma lê |
+| View | `gold.predicoes` | Uma linha por predição, com a prova de "antes do jogo" (seção 3) |
 | View | `gold.predicoes_avaliadas` | Cada predição com o resultado real, quando houver |
 
 ## 2. Tópico `eventos`
@@ -116,133 +111,119 @@ Exemplo:
 - Eventos `replay` são partidas que já aconteceram. Servem para a demo; a plataforma não deve
   mostrá-los como jogo atual (a `gold.partidas_atual` já os exclui).
 
-### Push para a API do André (`eventos-api`)
+## 3. Predições
 
-O Pub/Sub faz `POST` na URL cadastrada com este envelope (o evento vai em base64 em `data`;
-abaixo, abreviado):
+**Quem prevê:** o Dataflow, chamando a API do modelo. Para cada evento de partida **ainda não
+iniciada** (`TIMED` ou `SCHEDULED`), ele manda `POST /predict/lote` (seção 4), em lotes de até
+100, com `match_id`, `event_id`, `competition`, `season` e os ids dos clubes. Eventos de partida em
+andamento ou encerrada não chamam a API: são o resultado real.
 
-```json
-{
-  "message": {
-    "data": "eyJldmVudF9pZCI6ICJmZG9yZ181NTUwNDc6VElNRUQ6LToyMDI2LTEwLTE2VDIzOjAwOjAwWiIsIC4uLn0=",
-    "attributes": {"mode": "live", "competition": "BSA"},
-    "messageId": "17702301744963958",
-    "publishTime": "2026-10-16T13:14:13.664Z"
-  },
-  "subscription": "projects/pdm-bia-505511/subscriptions/eventos-api"
-}
-```
+**Autenticação:** a API é privada. Os workers do Dataflow rodam com a conta padrão do Compute
+(`<número do projeto>-compute@developer.gserviceaccount.com`), que tem `roles/run.invoker` no
+serviço `modelo-api`, e mandam um ID token com audience igual à URL do serviço.
+`streaming/dataflow.sh iniciar` dá a permissão e passa a URL.
 
-- Responda **2xx em até 60 s** para confirmar. Qualquer outra resposta faz o Pub/Sub tentar de
-  novo, com espera crescente.
-- Evento que você decide ignorar (ex. `FINISHED`) ou que não consegue ler: responda **204**
-  mesmo assim, senão ele volta para sempre. Responda 5xx só em falha passageira sua.
+**Novas tentativas:** timeout (60 s de leitura, para cobrir o cold start), erro de conexão, 429 e
+5xx são tentados de novo, até 4 vezes no total, com espera de 1, 2 e 4 s. Num lote que volta 200,
+só os itens com 429, 500 ou 503 são reenviados. 4xx não é tentado de novo.
 
-## 3. Tópico `predicoes`
+**Onde a predição fica:** no próprio evento, em `stream.partidas`. A linha de um evento previsto
+traz, além das colunas do evento:
 
-**Quem publica:** a API do André, uma mensagem por predição. **Quem consome:** a assinatura
-BigQuery `predicoes-bigquery` (grava em `stream.predicoes`) e o push `predicoes-plataforma`.
+| Coluna | Tipo | Descrição |
+| --- | --- | --- |
+| `prediction_id` | STRING | Igual para o mesmo evento e a mesma versão do modelo (UUID5) |
+| `model_name` | STRING | Ex. `boosted_tree_brasileirao` |
+| `model_version` | STRING | Versão no Vertex AI Model Registry |
+| `prob_home`, `prob_draw`, `prob_away` | FLOAT64 | Probabilidades de cada resultado |
+| `predicted_outcome` | STRING | `home`, `draw` ou `away`, os rótulos de `silver.matches.outcome` |
+| `predicted_at` | TIMESTAMP | Quando a API respondeu |
+| `features_ate` | TIMESTAMP | Instante do último dado usado nas features, quando a gold o traz |
 
-**Corpo:** JSON UTF-8. Cada campo cai na coluna de mesmo nome em `stream.predicoes`; campos que
-não existem na tabela são descartados. Uma mensagem que viola a tabela (campo obrigatório ausente,
-tipo errado) é tentada 5 vezes e vai para `predicoes-dlq`; veja com
-`gcloud pubsub subscriptions pull predicoes-dlq-sub --project=pdm-bia-505511 --auto-ack`.
+Eventos sem predição têm essas colunas nulas.
 
-| Campo | Tipo | Nulo? | Descrição |
-| --- | --- | --- | --- |
-| `prediction_id` | string | não | Único por predição, ex. UUID4 |
-| `event_id` | string | sim | `event_id` do evento que disparou a predição; nulo se veio do `/predict` |
-| `match_id` | string | não | O `match_id` do evento (`fdorg_...`) |
-| `league_id` | string | sim | `brasileirao_serie_a`, `epl`... (ids da silver) |
-| `model_name` | string | não | Ex. `boosted_tree_brasileirao` |
-| `model_version` | string | não | Versão no Vertex AI Model Registry |
-| `prob_home` | float | sim | Probabilidade de vitória do mandante |
-| `prob_draw` | float | sim | Probabilidade de empate |
-| `prob_away` | float | sim | Probabilidade de vitória do visitante |
-| `predicted_outcome` | string | não | `home`, `draw` ou `away` |
-| `predicted_at` | string | não | ISO 8601 UTC, ex. `2026-10-16T13:15:02Z` |
+**Falhas:** a partida agendada que fica sem predição chega em `stream.partidas` mesmo assim, e
+ganha uma linha em `stream.predicoes_falhas` (`event_id`, `match_id`, `league_id`, `status`
+HTTP, `motivo`, `tentativas`, `processed_at`). Motivos:
 
-Exemplo (o formato foi validado no ar em 16/10 com uma mensagem de teste):
+| Motivo | De onde vem |
+| --- | --- |
+| `sem_campeao`, `fora_da_gold`, `features_ausentes`, `pedido_invalido`, `indisponivel`, `erro_interno` | Da API (seção 4) |
+| `timeout`, `conexao` | Do cliente: a API não respondeu ou cortou a resposta (`status` nulo) |
+| `token` | O worker não conseguiu o ID token (`status` nulo) |
+| `erro_cliente` | Erro inesperado no próprio pipeline ao chamar a API, ex. `--api_url` inválida (`status` nulo) |
+| `nao_autorizado` | 401 ou 403: falta `run.invoker` para a conta dos workers |
+| `resposta_invalida` | A API respondeu 200 num formato inesperado (sem `resultados`, item sem `prediction_id`, data ilegível) |
+| `http_<status>` | Outro status sem motivo no corpo |
 
-```json
-{
-  "prediction_id": "6f0c3c7e-2f7e-4b8f-9a55-0d6c2f1e9a10",
-  "event_id": "fdorg_555047:TIMED:-:2026-10-16T23:00:00Z",
-  "match_id": "fdorg_555047",
-  "league_id": "brasileirao_serie_a",
-  "model_name": "boosted_tree_brasileirao",
-  "model_version": "1",
-  "prob_home": 0.48,
-  "prob_draw": 0.29,
-  "prob_away": 0.23,
-  "predicted_outcome": "home",
-  "predicted_at": "2026-10-16T13:15:02Z"
-}
-```
+**Leitura:** `gold.predicoes` tem uma linha por `prediction_id` (o evento reentregue pelo Pub/Sub
+repete o id e é descartado), no formato da tabela acima, mais `event_id`, `match_id`,
+`league_id`, `kickoff_utc`, `mode` e a prova de que a predição veio antes do jogo:
 
-Os rótulos `home`, `draw` e `away` são os mesmos de `silver.matches.outcome`, o que permite a
-`gold.predicoes_avaliadas` comparar predição e resultado sem tradução.
+| Coluna | Vale para | Significado |
+| --- | --- | --- |
+| `prevista_antes_do_jogo` | `live` | `predicted_at < kickoff_utc` |
+| `features_antes_do_jogo` | `replay` | `features_ate < kickoff_utc`: o replay roda depois do jogo, então o que conta é as features pararem antes dele |
 
-## 4. API do modelo (André)
+A exportação pública `gold/predictions.parquet` (`scripts/exportar_tabelas_publicas.sh`) sai de
+`gold.predicoes`.
 
-Um serviço Cloud Run com duas rotas, as duas chamando a mesma função de predição:
+## 4. API do modelo
 
-| Rota | Quem chama | Entrada | Saída |
-| --- | --- | --- | --- |
-| `POST /predict` | curl/Postman na demo | JSON com os dados da partida | A predição, no formato da seção 3, em JSON |
-| `POST /pubsub` | Push da assinatura `eventos-api` | Envelope da seção 2 | 204; publica a predição em `predicoes` |
+Um serviço Cloud Run (`modelo-api`, pacote `modelo/api/`) no `pdm-bia-505511`, **privado**:
+quem chama precisa de `roles/run.invoker` e de `Authorization: Bearer <ID token>`. No
+streaming, quem chama é o Dataflow, com a conta dos workers.
 
-Sugestão para a entrada do `/predict`: aceitar `{"match_id": "fdorg_555047"}` e buscar as features
-em `gold.match_features` (as partidas agendadas do Brasileirão estão lá com `split_set = 'PREDICT'`
-e o mesmo `match_id` dos eventos), ou receber as features diretamente. A escolha é do André; o
-formato da **saída** é o da seção 3, para o `/predict` e o tópico falarem a mesma língua.
+| Rota | Entrada | Saída |
+| --- | --- | --- |
+| `POST /predict` | Um pedido (abaixo) | A predição: `prediction_id`, `event_id`, `match_id`, `league_id` e as colunas da seção 3 |
+| `POST /predict/lote` | `{"pedidos": [...]}`, de 1 a 100 pedidos | Sempre 200: `{"resultados": [{"match_id", "event_id", "status", "predicao", "motivo"}]}`, na ordem dos pedidos |
+| `GET /health` | | Versão de cada modelo, `motivo` (`sem_campeao` quando não há versão aprovada), partidas carregadas |
 
-**Dados de treino**, um arquivo por liga, com as features da gold e três rótulos
-(`label_outcome`, `label_goals_home`, `label_goals_away`):
-`https://storage.googleapis.com/foota-toota-505511/gold/match_training_brasileirao.parquet` e
-`.../gold/match_training_epl.parquet`. Use `split_set` (`TRAIN`, `EVAL`, `TEST`, `PREDICT`); as
-linhas `PREDICT` são os jogos a prever, sem rótulo. Os gols são só rótulo, nunca feature.
+**Pedido.** Só `match_id` é obrigatório.
 
-**Como ficou (`modelo/api.py`):**
+| Campo | Para quê |
+| --- | --- |
+| `match_id` | A partida; procurada na gold de cada liga |
+| `league_id` | Restringe a uma liga (id da silver) |
+| `competition` | Código do Football-Data.org (`BSA`, `PL`...), quando não vem `league_id` |
+| `event_id` | O evento que originou o pedido: com ele o `prediction_id` é determinístico (mesmo evento e mesma versão, mesmo id), então um retry não duplica predição |
+| `season`, `home_team_id`, `away_team_id` | Acham a partida pelo confronto quando a gold a guarda com o id de outra fonte (o replay traz ids `fdorg_`, a gold pode ter `fduk_`) |
+| `features` | Features diretas, para simular uma partida (pede `league_id`); as que faltam viram nulo |
 
-- `POST /predict` recebe `{"match_id": "fdorg_555047"}` e acha a liga sozinho; `league_id` é
-  opcional. Para simular uma partida, `{"match_id": "...", "league_id": "epl", "features": {...}}`
-  usa as features enviadas (as que faltam viram nulo). A predição também é publicada em
-  `predicoes`, com `event_id` nulo, a não ser com `"publicar": false`.
-- As features vêm da gold pública (`gs://foota-toota-505511/gold/match_features_<liga>.parquet`),
-  relida a cada 10 minutos. Não precisa de acesso ao BigQuery do pipeline.
-- `POST /pubsub` acha a partida pelo `match_id` e, se não achar, pelo confronto (temporada,
-  mandante e visitante). O replay traz ids `fdorg_` de jogos que a gold guarda com outro id
-  (`fduk_...`); o de-para de clubes sai de `bronze/football_data_org/competition=BSA/matches.jsonl`.
-  A predição publicada leva sempre o `match_id` do evento.
-- `prediction_id` é o mesmo para o mesmo `event_id` e a mesma versão do modelo, então uma
-  reentrega do Pub/Sub repete o id em vez de criar outro.
-- `GET /health` mostra a versão de cada modelo e quantas partidas cada liga tem carregadas.
-- Predição x real: a tabela `pdm-andre-2026.modelo.predicoes_vs_real` (`modelo/sql/`) tem uma
-  linha por `match_id`, o mesmo antes e depois do jogo. O `/pubsub` grava a predição quando chega um
-  evento agendado e o placar quando chega o `FINISHED`, em qualquer ordem (MERGE), e `hit` diz se o
-  modelo acertou. A view `modelo.acerto_por_versao` resume acerto, log loss e o "sempre mandante"
-  por versão e modo (live/replay). Fica no projeto do André, ao lado dos modelos; a
-  `gold.predicoes_avaliadas` do pipeline continua sendo a visão por predição. Roteiro da demo:
-  [`demo-modelo.md`](demo-modelo.md).
-- O modelo de cada liga é a versão com alias `campeao` no Vertex AI Model Registry do projeto do
-  André (sem o alias, a versão padrão). Mover o alias troca o modelo em até 10 minutos, sem deploy.
-- `modelo/treinar.py` treina os dois modelos (scikit-learn, árvores com boosting) sobre a mesma gold
-  pública: hiperparâmetros escolhidos em EVAL, retreino em TRAIN + EVAL, medida em TEST. Uma versão
-  só ganha o alias `campeao` se bater, em TEST, o "sempre mandante" (acurácia), as frequências do
-  treino (log loss) e o campeão atual, reavaliado nas mesmas partidas. O `metricas.json` fica ao
-  lado do `model.joblib` no bucket, e cada execução (aprovada ou não) vira um run no Vertex AI
-  Experiments `foota-toota-resultado`, com hiperparâmetros, métricas de TEST e a decisão.
+**Erros.** Todo erro traz `{"detail": {"motivo", "mensagem"}}` (no lote, `status` e `motivo`
+em cada item). Da API, só o `503` é passageiro; o Dataflow tenta de novo também `429` e `500`
+(seção 3):
 
-Para publicar em `predicoes` de outro projeto, a conta de serviço do Cloud Run precisa de
-`roles/pubsub.publisher` no tópico. O Raphael concede (`MODELO_SA=<email> streaming/infra.sh`).
+| Status | `motivo` | Quando |
+| --- | --- | --- |
+| 404 | `fora_da_gold` | A partida não está na gold |
+| 409 | `sem_campeao` | A liga não tem versão com alias `campeao`, ou a competição não tem modelo |
+| 409 | `features_ausentes` | O modelo pede uma coluna que a gold não tem: só se resolve com ação de alguém |
+| 422 | `pedido_invalido` | `league_id` desconhecido, features diretas sem liga ou fora da lista do modelo |
+| 500 | `erro_interno` | Erro inesperado num pedido; no lote, só aquele item |
+| 503 | `indisponivel` | Gold ou Registry fora do ar (chamadas ao Registry com timeout de 30 s) |
+
+**Features** vêm da gold pública (`gs://foota-toota-505511/gold/match_features_<liga>.parquet`),
+relida a cada 10 minutos. `features_ate` é o instante do último dado usado nas features, quando a
+gold traz a coluna; sem ela, `null`.
+
+**Modelos.** O de cada liga é a versão com alias `campeao` no Vertex AI Model Registry do
+`pdm-bia-505511`; mover o alias troca o modelo em até 10 minutos, sem deploy, e tirá-lo deixa a
+liga sem predição. Cada versão é um diretório em `gs://pdm-bia-505511-modelos/` com
+`model.joblib`, `features.json` (a lista ordenada de features que o modelo recebe) e
+`metricas.json`.
+
+**Treino** (`modelo/treinar.py`): hiperparâmetros escolhidos em EVAL, retreino em TRAIN + EVAL,
+medida em TEST. Uma versão só ganha o alias `campeao` se bater, em TEST, o "sempre mandante"
+(acurácia), as frequências do treino (log loss) e o campeão atual, reavaliado nas mesmas partidas
+com as features dele. Empate não promove. Cada execução, aprovada ou não, vira um run no Vertex AI
+Experiments `foota-toota-resultado`.
 
 ## 5. Plataforma (Wagner)
 
-**Ao vivo:** uma rota HTTPS no backend recebe o push de `predicoes-plataforma`, com o envelope da
-seção 2 (a predição em base64 em `message.data`). Mesmas regras: 2xx confirma, o resto repete.
-
-**Histórico e estado das partidas:** no BigQuery.
+**Partidas e predições:** no BigQuery. Uma predição aparece em `gold.predicoes` segundos depois
+de o evento agendado chegar ao Dataflow.
 
 ```sql
 -- página de um jogo: estado atual (batch + stream, a versão mais nova)
@@ -251,7 +232,7 @@ WHERE league_id = 'brasileirao_serie_a' AND season = 2026 AND round = '31'
 ORDER BY kickoff_utc;
 
 -- predições de uma partida, da mais nova para a mais antiga
-SELECT * FROM `pdm-bia-505511.stream.predicoes`
+SELECT * FROM `pdm-bia-505511.gold.predicoes`
 WHERE match_id = 'fdorg_555047'
 ORDER BY predicted_at DESC;
 
@@ -279,7 +260,7 @@ Para ler o BigQuery de outro projeto, a conta de serviço do backend precisa de
 | `silver/matches.parquet` | Um jogo por linha, todas as ligas; jogos vistos por várias fontes aparecem uma vez |
 | `silver/standings.parquet` | Classificação com o `team_id` canônico (`source_team_id` é o do Football-Data.org) |
 | `silver/match_stats.parquet`, `silver/match_odds.parquet` | Sempre com um `match_id` que existe em `matches` |
-| `gold/predictions.parquet` | `stream.predicoes`, no formato da seção 3 |
+| `gold/predictions.parquet` | `gold.predicoes` (seção 3) |
 
 O bucket é reexportado a cada `scripts/atualizar_partidas.sh`, que coleta partidas e classificação
 na mesma rodada.
@@ -288,24 +269,7 @@ na mesma rodada.
 
 | Quem | O quê | Para |
 | --- | --- | --- |
-| André | URL pública da rota `/pubsub` | Criar a assinatura push `eventos-api` |
-| André | E-mail da conta de serviço do Cloud Run | Permissão de publicar em `predicoes` |
-| Wagner | URL pública da rota que recebe as predições | Criar a assinatura push `predicoes-plataforma` |
 | Wagner | E-mail da conta de serviço do backend | Permissão de leitura no BigQuery |
-
-### Autenticação do push
-
-Todo push sai com um token OIDC no cabeçalho `Authorization: Bearer <token>`, assinado pela conta
-**`pubsub-push@pdm-bia-505511.iam.gserviceaccount.com`**. Para conferir que a chamada veio do
-nosso Pub/Sub, valide o token como um ID token do Google e confira:
-
-- `email` = `pubsub-push@pdm-bia-505511.iam.gserviceaccount.com` e `email_verified` = `true`;
-- `aud` = a URL exata do endpoint que vocês nos passaram.
-
-Há dois jeitos de fazer isso no Cloud Run. Se o serviço exige autenticação, liberem
-`roles/run.invoker` para essa conta e o próprio Cloud Run valida o token. Se o serviço é público
-(`--allow-unauthenticated`), validem no código, por exemplo com
-`google.oauth2.id_token.verify_oauth2_token` em Python.
 
 ## 7. Decisões do grupo (16/10)
 
@@ -328,15 +292,15 @@ Há dois jeitos de fazer isso no Cloud Run. Se o serviço exige autenticação, 
 | Tarefa | Comando |
 | --- | --- |
 | Criar ou conferir a infraestrutura | `streaming/infra.sh` |
-| Ligar o Dataflow (cobra por hora) | `streaming/dataflow.sh iniciar` |
-| Desligar o Dataflow | `streaming/dataflow.sh parar` |
-| Publicar o coletor ao vivo | `streaming/deploy_coletor.sh` |
-| Pausar ou retomar a coleta | `streaming/deploy_coletor.sh pausar` / `retomar` |
-| Replay de rodadas para a demo | `uv run python streaming/producer.py replay --rodadas 28-30 --intervalo 1` |
+| Ligar o Dataflow (cobra por hora) | DAG `dataflow_liga_desliga` com `ligar`, ou `streaming/dataflow.sh iniciar` |
+| Desligar o Dataflow | DAG `dataflow_liga_desliga` com `desligar`, ou `streaming/dataflow.sh parar` |
+| Publicar o coletor ao vivo | `streaming/deploy_coletor.sh` (o agendamento é do DAG `coleta_ao_vivo`) |
+| Coleta sem o Airflow (VM parada) | `streaming/deploy_coletor.sh retomar` / `pausar` (Cloud Scheduler) |
+| Replay de rodadas para a demo | DAG `disparar_eventos`, ou `uv run python streaming/producer.py replay --rodadas 28-30 --intervalo 1` |
 | Ver eventos sem publicar | `uv run python streaming/producer.py --sem-publicar replay --rodadas 30 --intervalo 0` |
 | Atualizar o batch (bronze -> gold) | `scripts/atualizar_partidas.sh` |
 | Treinar, avaliar e registrar os modelos | `uv run --no-project --with-requirements modelo/requirements-treino.txt python modelo/treinar.py` |
-| Publicar a API do modelo (projeto do André) | `modelo/deploy_api.sh` |
+| Publicar a API do modelo | `modelo/deploy_api.sh` |
 
 Com o Dataflow desligado nada se perde: os eventos continuam caindo em `stream.eventos_brutos` e
 esperam até 7 dias na assinatura `eventos-dataflow`, processados quando o job volta.

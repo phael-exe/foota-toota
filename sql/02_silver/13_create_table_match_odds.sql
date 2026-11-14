@@ -27,7 +27,12 @@ WITH fduk AS (
         COALESCE(th.team_id, f.HomeTeam) AS home_team_id,
         COALESCE(ta.team_id, f.AwayTeam) AS away_team_id,
         f.B365H, f.B365D, f.B365A
-    FROM `PROJECT.bronze.football_data_uk` f
+    -- the Premier League files before 2022/23 only come in here, for the model's training
+    FROM (
+        SELECT * FROM `PROJECT.bronze.football_data_uk`
+        UNION ALL
+        SELECT * FROM `PROJECT.bronze.football_data_uk_epl_historico`
+    ) f
     LEFT JOIN `PROJECT.silver.team_map` th
            ON th.source_id = 'football_data_uk' AND th.raw_team_id = f.HomeTeam
     LEFT JOIN `PROJECT.silver.team_map` ta
@@ -96,4 +101,69 @@ JOIN `PROJECT.silver.matches` m
   AND m.season = b.Season
   AND m.home_team_id = COALESCE(ah.team_id, b.Home)
   AND m.away_team_id = COALESCE(aa.team_id, b.Away)
-WHERE COALESCE(b.PSCH, b.B365CH, b.AvgCH) IS NOT NULL;
+WHERE COALESCE(b.PSCH, b.B365CH, b.AvgCH) IS NOT NULL
+
+UNION ALL
+
+-- Odds of the games still to be played (bronze.football_data_uk_fixtures, the newest snapshot
+-- of each game), on the scheduled row of silver.matches: once a game is over, the files above
+-- hold it. Each league keeps the bookmakers its history has, so the model sees the same columns
+-- it was trained on: Pinnacle, the market average and Bet365 for the Brasileirao (pre-game here,
+-- closing in the history), only Bet365 for the European leagues.
+SELECT
+    m.match_id,
+    SAFE_CAST(f.B365H AS FLOAT64) AS bet365_home_win,
+    SAFE_CAST(f.B365D AS FLOAT64) AS bet365_draw,
+    SAFE_CAST(f.B365A AS FLOAT64) AS bet365_away_win,
+    IF(f.Div = 'BRA', SAFE_CAST(f.PSH AS FLOAT64), NULL) AS pinnacle_home_win,
+    IF(f.Div = 'BRA', SAFE_CAST(f.PSD AS FLOAT64), NULL) AS pinnacle_draw,
+    IF(f.Div = 'BRA', SAFE_CAST(f.PSA AS FLOAT64), NULL) AS pinnacle_away_win,
+    IF(f.Div = 'BRA', SAFE_CAST(f.AvgH AS FLOAT64), NULL) AS market_avg_home_win,
+    IF(f.Div = 'BRA', SAFE_CAST(f.AvgD AS FLOAT64), NULL) AS market_avg_draw,
+    IF(f.Div = 'BRA', SAFE_CAST(f.AvgA AS FLOAT64), NULL) AS market_avg_away_win,
+    CAST(NULL AS FLOAT64) AS bet365_over_2_5,
+    CAST(NULL AS FLOAT64) AS bet365_under_2_5,
+    CAST(NULL AS FLOAT64) AS market_avg_over_2_5,
+    CAST(NULL AS FLOAT64) AS market_avg_under_2_5,
+    CURRENT_TIMESTAMP() AS transformed_at
+FROM (
+    SELECT
+        *,
+        CASE Div
+            WHEN 'BRA' THEN 'brasileirao_serie_a'
+            WHEN 'E0'  THEN 'epl'
+            WHEN 'E1'  THEN 'championship'
+            WHEN 'SP1' THEN 'la_liga'
+            WHEN 'I1'  THEN 'serie_a'
+            WHEN 'D1'  THEN 'bundesliga'
+            WHEN 'F1'  THEN 'ligue_1'
+            WHEN 'N1'  THEN 'eredivisie'
+            WHEN 'P1'  THEN 'primeira_liga'
+            WHEN 'B1'  THEN 'belgian_pro_league'
+            WHEN 'SC0' THEN 'scottish_premiership'
+        END AS league_id,
+        SAFE.PARSE_DATE('%d/%m/%Y', Date) AS data_jogo
+    FROM `PROJECT.bronze.football_data_uk_fixtures`
+    WHERE HomeTeam IS NOT NULL AND AwayTeam IS NOT NULL
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY Div, HomeTeam, AwayTeam, Date ORDER BY snapshot_date DESC
+    ) = 1
+) f
+LEFT JOIN `PROJECT.silver.team_alias` ah
+       ON f.Div = 'BRA' AND ah.league_id = 'brasileirao_serie_a'
+      AND ah.source_id = 'football_data_uk' AND ah.raw_name = f.HomeTeam
+LEFT JOIN `PROJECT.silver.team_alias` aa
+       ON f.Div = 'BRA' AND aa.league_id = 'brasileirao_serie_a'
+      AND aa.source_id = 'football_data_uk' AND aa.raw_name = f.AwayTeam
+LEFT JOIN `PROJECT.silver.team_map` th
+       ON f.Div != 'BRA' AND th.source_id = 'football_data_uk' AND th.raw_team_id = f.HomeTeam
+LEFT JOIN `PROJECT.silver.team_map` ta
+       ON f.Div != 'BRA' AND ta.source_id = 'football_data_uk' AND ta.raw_team_id = f.AwayTeam
+-- a fixture is one (home, away) pair; the date window keeps it to this game of the pair
+JOIN `PROJECT.silver.matches` m
+  ON  m.league_id = f.league_id
+  AND m.status = 'scheduled'
+  AND m.home_team_id = COALESCE(ah.team_id, th.team_id, f.HomeTeam)
+  AND m.away_team_id = COALESCE(aa.team_id, ta.team_id, f.AwayTeam)
+  AND ABS(DATE_DIFF(DATE(m.kickoff_utc), f.data_jogo, DAY)) <= 1
+WHERE COALESCE(f.PSH, f.AvgH, f.B365H) IS NOT NULL;

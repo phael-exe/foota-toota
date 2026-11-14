@@ -42,11 +42,31 @@ SELECT
     LEAST(hf.rest_days, 60) AS home_rest_days,
     LEAST(af.rest_days, 60) AS away_rest_days,
     h.h2h_avg_points_last_5,
+
+    -- long-run strength: Elo of both clubs before the kickoff (gold.match_elo)
+    e.elo_home,
+    e.elo_away,
+    e.elo_diff,
+    e.elo_p_home,
+
+    -- the market: probabilities implied by the odds, without the bookmaker margin. Closing odds
+    -- for a game already played (set before the kickoff), the newest pre-game odds for a game to
+    -- come, NULL when no bookmaker priced it yet. Same priority the model was trained with.
+    o.odds_p_home,
+    o.odds_p_draw,
+    o.odds_p_away,
     ARRAY_CONCAT(
         COALESCE(hf.season_match_ids, []),
         COALESCE(af.season_match_ids, []),
         COALESCE(h.h2h_match_ids, [])
     ) AS extra_history_match_ids,
+    -- the last data behind these features: the latest earlier match of either team (season
+    -- form, rest and head-to-head come from the same matches or older ones). G9 checks it is
+    -- before the kickoff; the model API returns it with every prediction.
+    GREATEST(
+        COALESCE(hf.history_latest_kickoff_utc, af.history_latest_kickoff_utc),
+        COALESCE(af.history_latest_kickoff_utc, hf.history_latest_kickoff_utc)
+    ) AS features_ate,
 
     -- filter, label, split and metadata
     COALESCE(hf.history_count, 0) = 5
@@ -68,4 +88,31 @@ LEFT JOIN `PROJECT.gold.team_form` hf
 LEFT JOIN `PROJECT.gold.team_form` af
        ON af.match_id = m.match_id AND af.team_id = m.away_team_id
 LEFT JOIN `PROJECT.gold.h2h_form` h
-       ON h.match_id = m.match_id;
+       ON h.match_id = m.match_id
+LEFT JOIN `PROJECT.gold.match_elo` e
+       ON e.match_id = m.match_id
+LEFT JOIN (
+    SELECT
+        match_id,
+        inv.h / (inv.h + inv.d + inv.a) AS odds_p_home,
+        inv.d / (inv.h + inv.d + inv.a) AS odds_p_draw,
+        inv.a / (inv.h + inv.d + inv.a) AS odds_p_away
+    FROM (
+        SELECT
+            match_id,
+            CASE
+                WHEN pinnacle_home_win > 1 AND pinnacle_draw > 1 AND pinnacle_away_win > 1
+                    THEN STRUCT(1 / pinnacle_home_win AS h, 1 / pinnacle_draw AS d,
+                                1 / pinnacle_away_win AS a)
+                WHEN market_avg_home_win > 1 AND market_avg_draw > 1 AND market_avg_away_win > 1
+                    THEN STRUCT(1 / market_avg_home_win, 1 / market_avg_draw,
+                                1 / market_avg_away_win)
+                WHEN bet365_home_win > 1 AND bet365_draw > 1 AND bet365_away_win > 1
+                    THEN STRUCT(1 / bet365_home_win, 1 / bet365_draw, 1 / bet365_away_win)
+            END AS inv
+        FROM `PROJECT.silver.match_odds`
+    )
+    WHERE inv IS NOT NULL
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY match_id) = 1
+) o
+       ON o.match_id = m.match_id;

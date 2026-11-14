@@ -35,7 +35,7 @@ import math
 import sys
 import time
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -51,15 +51,38 @@ EXPERIMENTO = "foota-toota-resultado"
 SERVING = "us-docker.pkg.dev/vertex-ai/prediction/sklearn-cpu.1-6:latest"
 GRADE = {"max_depth": (2, 3, 4), "learning_rate": (0.03, 0.1)}
 MAX_ARVORES = 300
+# Força de longo prazo dos clubes antes do jogo
+# (sql/04_gold/02a_create_table_match_elo.sql)
+ELO = ("elo_home", "elo_away", "elo_diff", "elo_p_home")
+# As probabilidades do mercado, sem a margem da casa (as odds de fechamento nos
+# jogos passados, as de antes do jogo nos próximos; vazias sem odds ainda)
+ODDS = ("odds_p_home", "odds_p_draw", "odds_p_away")
+_ELO_DESCANSO = ("elo_diff", "elo_p_home", "home_rest_days", "away_rest_days")
+# Os conjuntos de features que disputam cada liga, pela log loss em EVAL (nunca
+# TEST): a forma recente da versão 1, ela com o Elo, o Elo com o descanso (a
+# versão 2) e ele com o mercado. O mercado nunca vai sozinho: a API prevê jogos
+# semanas antes de haver odds, e aí só sobraria a média dos resultados; com o
+# Elo junto, as árvores seguem por ele quando as odds faltam (o treino tem os
+# dois casos)
+CANDIDATAS: dict[str, tuple[str, ...]] = {
+    "forma": api.FEATURES,
+    "forma+elo": (*api.FEATURES, *ELO),
+    "elo+descanso": _ELO_DESCANSO,
+    "elo+descanso+odds": (*_ELO_DESCANSO, *ODDS),
+}
 
 
 @dataclass
 class Conjunto:
     x: list[list[float]] = field(default_factory=list)
     y: list[str] = field(default_factory=list)
+    # As linhas da gold, para avaliar um campeão com as features dele
+    linhas: list[dict] = field(default_factory=list)
 
 
-def separar(linhas: list[dict]) -> dict[str, Conjunto]:
+def separar(
+    linhas: list[dict], nomes: Sequence[str] = api.FEATURES
+) -> dict[str, Conjunto]:
     """TRAIN, EVAL e TEST só com partidas que têm histórico e resultado: sem
     os cinco jogos anteriores as janelas da gold ficam vazias."""
     conjuntos = {nome: Conjunto() for nome in ("TRAIN", "EVAL", "TEST")}
@@ -71,8 +94,9 @@ def separar(linhas: list[dict]) -> dict[str, Conjunto]:
             or linha["label_outcome"] not in api.CLASSES
         ):
             continue
-        conjunto.x.append(api.vetor(linha))
+        conjunto.x.append(api.vetor(linha, nomes))
         conjunto.y.append(linha["label_outcome"])
+        conjunto.linhas.append(linha)
     return conjuntos
 
 
@@ -171,21 +195,36 @@ def decidir(
 def treinar_liga(
     liga: api.Liga,
     linhas: list[dict],
-    atual: Callable[[api.Liga], tuple[str, Any] | None],
+    atual: Callable[[api.Liga], tuple[str, Any, Sequence[str]] | None],
+    features: Sequence[str] = api.FEATURES,
+    candidatas: dict[str, Sequence[str]] | None = None,
     **busca: Any,
 ) -> tuple[Any, dict]:
-    """(estimador, relatório). `atual` devolve (versão, estimador) do modelo
-    que a API serve hoje, ou None."""
-    conjuntos = separar(linhas)
+    """(estimador, relatório). `atual` devolve (versão, estimador, features)
+    do modelo que a API serve hoje, ou None. Com `candidatas`, cada conjunto
+    de features passa pela mesma busca em EVAL e fica o de menor log loss;
+    sem, `features`."""
+    opcoes = candidatas or {"fixas": features}
+    perdas: dict[str, float] = {}
+    melhor: tuple | None = None
+    for nome, nomes in opcoes.items():
+        conjuntos = separar(linhas, nomes)
+        params, perda_eval = escolher(
+            conjuntos["TRAIN"], conjuntos["EVAL"], **busca
+        )
+        perdas[nome] = perda_eval
+        if melhor is None or perda_eval < melhor[0]:
+            melhor = (perda_eval, nome, list(nomes), conjuntos, params)
+    assert melhor is not None
+    perda_eval, conjunto, features, conjuntos, params = melhor
     treino, avaliacao, teste = (
         conjuntos["TRAIN"],
         conjuntos["EVAL"],
         conjuntos["TEST"],
     )
-    params, perda_eval = escolher(treino, avaliacao, **busca)
     final = Conjunto(treino.x + avaliacao.x, treino.y + avaliacao.y)
     estimador = classificador(**params).fit(final.x, final.y)
-    api.validar(estimador)
+    api.validar(estimador, features)
 
     modelo = metricas(teste.y, api.probabilidades(estimador, teste.x))
     mandante = sum(r == "home" for r in teste.y) / len(teste.y)
@@ -194,8 +233,9 @@ def treinar_liga(
     campeao = None
     versao_atual = atual(liga)
     if versao_atual is not None:
-        versao, estimador_atual = versao_atual
-        probs = api.probabilidades(estimador_atual, teste.x)
+        versao, estimador_atual, nomes_atual = versao_atual
+        x = [api.vetor(linha, nomes_atual) for linha in teste.linhas]
+        probs = api.probabilidades(estimador_atual, x)
         campeao = {"versao": versao, **metricas(teste.y, probs)}
     motivos = decidir(modelo, mandante, freq, campeao)
 
@@ -205,7 +245,9 @@ def treinar_liga(
         "liga": liga.league_id,
         "modelo": liga.modelo,
         "scikit_learn": sklearn,
-        "features": list(api.FEATURES),
+        "features": list(features),
+        "conjunto": conjunto,
+        "candidatas": perdas,
         "partidas": {nome: len(c.y) for nome, c in conjuntos.items()},
         "hiperparametros": params,
         "log_loss_eval": perda_eval,
@@ -227,6 +269,10 @@ def imprimir(relatorio: dict) -> None:
     t = relatorio["teste"]
     print(f"\n== {relatorio['modelo']} ({relatorio['liga']})")
     print(f"partidas: TRAIN {p['TRAIN']}, EVAL {p['EVAL']}, TEST {p['TEST']}")
+    perdas = ", ".join(
+        f"{nome} {perda:.4f}" for nome, perda in relatorio["candidatas"].items()
+    )
+    print(f"features em EVAL: {perdas}; fica {relatorio['conjunto']}")
     print(
         f"escolhido em EVAL (log loss {relatorio['log_loss_eval']:.4f}): "
         f"max_depth={h['max_depth']}, learning_rate={h['learning_rate']}, "
@@ -250,6 +296,22 @@ def imprimir(relatorio: dict) -> None:
         print("decisão: aprovado")
     else:
         print("decisão: reprovado; " + "; ".join(relatorio["motivos"]))
+
+
+def artefatos(estimador: Any, relatorio: dict) -> dict[str, bytes]:
+    """Os arquivos do diretório da versão: o estimador, a lista das features
+    que ele recebe (em ordem, a API lê daqui) e o relatório."""
+    import joblib
+
+    artefato = io.BytesIO()
+    joblib.dump(estimador, artefato)
+    return {
+        "model.joblib": artefato.getvalue(),
+        "features.json": json.dumps(relatorio["features"]).encode(),
+        "metricas.json": json.dumps(
+            relatorio, indent=2, ensure_ascii=False
+        ).encode(),
+    }
 
 
 # --- Registry ---------------------------------------------------------------
@@ -302,7 +364,10 @@ def registrar(
     operacao = resp.json()
     while not operacao.get("done"):
         time.sleep(2)
-        resp = http.get(f"{registry.api}/{operacao['name']}")
+        resp = http.get(
+            f"{registry.api}/{operacao['name']}",
+            timeout=api.REGISTRY_TIMEOUT_S,
+        )
         resp.raise_for_status()
         operacao = resp.json()
     if "error" in operacao:
@@ -338,19 +403,20 @@ def _aliases(
 
 def modelo_atual(
     registry: api.Registry | None, tolerar: bool = False
-) -> Callable[[api.Liga], tuple[str, Any] | None]:
-    """(versão, estimador) que a API serve hoje para a liga, ou None. Com
-    `tolerar`, uma falha no Registry só pula a comparação (o --sem-registrar
-    roda sem credenciais); registrando, ela para o treino, para nunca
-    promover sem comparar com o campeão."""
+) -> Callable[[api.Liga], tuple[str, Any, tuple[str, ...]] | None]:
+    """(versão, estimador, features) que a API serve hoje para a liga, ou
+    None. Com `tolerar`, uma falha no Registry só pula a comparação (o
+    --sem-registrar roda sem credenciais); registrando, ela para o treino,
+    para nunca promover sem comparar com o campeão."""
 
-    def atual(liga: api.Liga) -> tuple[str, Any] | None:
+    def atual(liga: api.Liga) -> tuple[str, Any, tuple[str, ...]] | None:
         if registry is None:
             return None
         try:
             versao, uri = registry.versao(liga.modelo)
-            return versao, registry.carregar(uri)
-        except api.SemModeloError:
+            estimador, nomes = registry.carregar(uri)
+            return versao, estimador, nomes
+        except api.SemCampeaoError:
             return None
         except Exception as erro:
             if not tolerar:
@@ -468,24 +534,17 @@ def main(argv: list[str] | None = None) -> int:
     for liga_id in args.ligas:
         liga = api.LIGAS[liga_id]
         url = f"{cfg.dados_url.rstrip('/')}/{liga.gold}"
-        colunas = [*api.COLUNAS, "label_outcome", "split_set"]
-        linhas = api.ler_parquet(api.baixar_publico(url), colunas)
+        linhas = api.ler_parquet(api.baixar_publico(url), None)
         estimador, relatorio = treinar_liga(
-            liga, linhas, modelo_atual(registry, tolerar=args.sem_registrar)
+            liga,
+            linhas,
+            modelo_atual(registry, tolerar=args.sem_registrar),
+            candidatas=CANDIDATAS,
         )
         relatorio["execucao"] = carimbo
         imprimir(relatorio)
 
-        import joblib
-
-        artefato = io.BytesIO()
-        joblib.dump(estimador, artefato)
-        arquivos = {
-            "model.joblib": artefato.getvalue(),
-            "metricas.json": json.dumps(
-                relatorio, indent=2, ensure_ascii=False
-            ).encode(),
-        }
+        arquivos = artefatos(estimador, relatorio)
         if args.saida:
             pasta = args.saida / liga.modelo
             pasta.mkdir(parents=True, exist_ok=True)
