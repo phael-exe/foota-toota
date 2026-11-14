@@ -48,6 +48,7 @@ def test_views_criadas_depois_do_que_leem():
     nomes = sorted(p.name for p in SQL.glob("*.sql"))
     alter = nomes.index("03a_alter_table_partidas_predicao.sql")
     predicoes = nomes.index("10_create_view_predicoes.sql")
+    assert nomes.index("09a_create_table_predicoes_lote.sql") < predicoes
     avaliadas = nomes.index("11_create_view_predicoes_avaliadas.sql")
     assert alter < predicoes < avaliadas
     assert "08_create_view_predicoes_avaliadas.sql" not in nomes

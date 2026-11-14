@@ -61,6 +61,9 @@ if [ -n "$(git -C "$root" status --porcelain -- scripts sql batch)" ]; then
     echo "aviso: scripts/, sql/ ou batch/ com mudanças fora de commit; a imagem leva o que está no disco" >&2
 fi
 commit="$(git -C "$root" rev-parse --short HEAD)"
+# A repredição do começo do job chama a API do modelo (a conta do job tem run.invoker)
+api="$("$GCLOUD" run services describe modelo-api --region="$REGIAO" "$project" \
+    --format='value(status.url)')"
 
 # O contexto leva só o que o job roda: o .dockerignore da raiz tira o sql/, e o Cloud Build
 # usa o docker sem .dockerignore por Dockerfile
@@ -80,7 +83,7 @@ echo "=== Cloud Run Job $JOB"
 "$GCLOUD" run jobs deploy "$JOB" \
     --image="$IMAGEM" \
     --region="$REGIAO" \
-    --set-env-vars="GCP_PROJECT_ID=$GCP_PROJECT_ID,GCS_BUCKET=$GCS_BUCKET,FOOTBALLDATA_API_KEY=$FOOTBALLDATA_API_KEY,COMMIT=$commit" \
+    --set-env-vars="GCP_PROJECT_ID=$GCP_PROJECT_ID,GCS_BUCKET=$GCS_BUCKET,FOOTBALLDATA_API_KEY=$FOOTBALLDATA_API_KEY,COMMIT=$commit,MODELO_API_URL=$api" \
     --memory=2Gi \
     --cpu=1 \
     --max-retries=0 \
