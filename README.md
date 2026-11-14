@@ -132,8 +132,10 @@ No BigQuery, três views juntam o histórico do batch com o stream:
 
 `modelo/treinar.py` treina um modelo por liga (Brasileirão e Premier League),
 um `HistGradientBoostingClassifier` do scikit-learn sobre a gold pública:
-escolhe os hiperparâmetros pela log loss em `EVAL`, retreina em
-`TRAIN + EVAL` e mede em `TEST`. Uma versão nova só é promovida se, em
+escolhe o conjunto de features (a forma recente, ela com o Elo dos clubes, ou
+o Elo com o descanso) e os hiperparâmetros pela log loss em `EVAL`, retreina
+em `TRAIN + EVAL` e mede em `TEST`. O Elo de cada clube antes de cada jogo sai
+da gold (`gold.match_elo`), calculado só com jogos anteriores. Uma versão nova só é promovida se, em
 `TEST`, bater o "sempre mandante" em acurácia, as frequências do treino em log
 loss e o modelo em produção. A versão aprovada é registrada no Vertex AI
 Model Registry com o alias `campeao`, e cada execução, aprovada ou não, vira

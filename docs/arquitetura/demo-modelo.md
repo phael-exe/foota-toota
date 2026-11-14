@@ -115,33 +115,39 @@ com um de-para de clubes tirado do bronze, e grava tudo com o `match_id` do even
 
 ## 3. MLOps: Registry, Experiments e a regra de promoção
 
-- **Model Registry:** `boosted_tree_brasileirao` e `boosted_tree_epl`, versão 1 com o alias
-  `campeao`. A API serve a versão que tem o alias e confere a cada 10 minutos: promover outra versão
+- **Model Registry:** `boosted_tree_brasileirao` e `boosted_tree_epl`, versão 2 com o alias
+  `campeao` (a versão 1, só com a forma recente, segue registrada). A API serve a versão que tem o alias e confere a cada 10 minutos: promover outra versão
   é mover o alias, sem novo deploy.
-- **Experiments** (`foota-toota-resultado`): um run por liga e execução. Dois aprovados (a versão 1)
-  e dois reprovados: o retreino nos mesmos dados empatou com o campeão, e empate não promove.
-- **A regra** (`modelo/treinar.py`): hiperparâmetros escolhidos em EVAL, retreino em TRAIN + EVAL,
+- **Experiments** (`foota-toota-resultado`): um run por liga e execução, aprovado ou não. Cada run
+  guarda a log loss em EVAL de cada conjunto de features e qual ficou.
+- **A regra** (`modelo/treinar.py`): conjunto de features e hiperparâmetros escolhidos em EVAL, retreino em TRAIN + EVAL,
   medida em TEST, que não entra em nenhuma escolha. Só vira campeão quem bate, em TEST, o "sempre
   mandante" (acurácia), as frequências do treino (log loss) e o campeão atual nas mesmas partidas.
 - Treinar de novo leva uns 9 minutos: não é para a hora. Se quiserem ver, o comando é
   `uv run --no-project --with-requirements modelo/requirements-treino.txt python modelo/treinar.py`.
 
-### Números (TEST, versão 1)
+### Números (TEST, versão 2)
+
+A versão 2 usa o Elo dos dois clubes e os dias de descanso: em EVAL, esse conjunto teve log loss
+menor que a forma recente (a versão 1) e que a forma com o Elo, nas duas ligas. As odds do mercado
+(Pinnacle, sem a margem da casa) servem de teto: não entram no modelo, porque não existem para os
+jogos futuros que a API prevê.
 
 | | Brasileirão | Premier League |
 | --- | --- | --- |
-| Partidas | 669 | 407 |
-| Acurácia do modelo | 50,1% | 45,0% |
-| Sempre mandante | 49,3% | 41,5% |
-| Log loss do modelo | 1,012 | 1,060 |
-| Log loss das frequências | 1,044 | 1,093 |
+| Partidas | 709 | 480 |
+| Acurácia, versão 2 | 51,3% | 47,9% |
+| Acurácia, versão 1 | 51,2% | 44,2% |
+| Sempre mandante | 49,8% | 41,9% |
+| Log loss, versão 2 | 1,002 | 1,046 |
+| Log loss, versão 1 | 1,007 | 1,059 |
+| Log loss das frequências | 1,041 | 1,089 |
+| Odds do mercado (acurácia / log loss) | 53,3% / 0,978 | 48,1% / 1,023 |
 
-No Brasileirão a acurácia passa o "sempre mandante" por menos de um ponto, dentro do ruído para 669
-partidas; o ganho que conta é a log loss, a qualidade das probabilidades que a plataforma mostra. Na
-EPL o ganho aparece nas duas medidas. Empate quase nunca é o resultado mais provável: o modelo do
-Brasileirão aponta empate em 10 das partidas de TEST (e o mandante em umas 625), o da EPL em
-nenhuma, como no antigo modelo do BigQuery ML. A probabilidade de empate está na resposta, só
-raramente é a maior.
+Na EPL o Elo leva a acurácia a 0,2 ponto do mercado. No Brasileirão o ganho aparece na log loss, a
+qualidade das probabilidades que a plataforma mostra, e a acurácia fica perto da versão 1. Empate
+quase nunca é o resultado mais provável, nem para o mercado: a probabilidade de empate está na
+resposta, só raramente é a maior.
 
 ## Se algo falhar
 
