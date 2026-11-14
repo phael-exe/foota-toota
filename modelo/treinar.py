@@ -51,6 +51,22 @@ EXPERIMENTO = "foota-toota-resultado"
 SERVING = "us-docker.pkg.dev/vertex-ai/prediction/sklearn-cpu.1-6:latest"
 GRADE = {"max_depth": (2, 3, 4), "learning_rate": (0.03, 0.1)}
 MAX_ARVORES = 300
+# Força de longo prazo dos clubes antes do jogo
+# (sql/04_gold/02a_create_table_match_elo.sql)
+ELO = ("elo_home", "elo_away", "elo_diff", "elo_p_home")
+# Os conjuntos de features que disputam cada liga, pela log loss em EVAL (nunca
+# TEST): a forma recente que o modelo usava, ela com o Elo, e o Elo só com o
+# descanso, que ganha onde a forma mais atrapalha do que ajuda
+CANDIDATAS: dict[str, tuple[str, ...]] = {
+    "forma": api.FEATURES,
+    "forma+elo": (*api.FEATURES, *ELO),
+    "elo+descanso": (
+        "elo_diff",
+        "elo_p_home",
+        "home_rest_days",
+        "away_rest_days",
+    ),
+}
 
 
 @dataclass
@@ -178,17 +194,31 @@ def treinar_liga(
     linhas: list[dict],
     atual: Callable[[api.Liga], tuple[str, Any, Sequence[str]] | None],
     features: Sequence[str] = api.FEATURES,
+    candidatas: dict[str, Sequence[str]] | None = None,
     **busca: Any,
 ) -> tuple[Any, dict]:
     """(estimador, relatório). `atual` devolve (versão, estimador, features)
-    do modelo que a API serve hoje, ou None."""
-    conjuntos = separar(linhas, features)
+    do modelo que a API serve hoje, ou None. Com `candidatas`, cada conjunto
+    de features passa pela mesma busca em EVAL e fica o de menor log loss;
+    sem, `features`."""
+    opcoes = candidatas or {"fixas": features}
+    perdas: dict[str, float] = {}
+    melhor: tuple | None = None
+    for nome, nomes in opcoes.items():
+        conjuntos = separar(linhas, nomes)
+        params, perda_eval = escolher(
+            conjuntos["TRAIN"], conjuntos["EVAL"], **busca
+        )
+        perdas[nome] = perda_eval
+        if melhor is None or perda_eval < melhor[0]:
+            melhor = (perda_eval, nome, list(nomes), conjuntos, params)
+    assert melhor is not None
+    perda_eval, conjunto, features, conjuntos, params = melhor
     treino, avaliacao, teste = (
         conjuntos["TRAIN"],
         conjuntos["EVAL"],
         conjuntos["TEST"],
     )
-    params, perda_eval = escolher(treino, avaliacao, **busca)
     final = Conjunto(treino.x + avaliacao.x, treino.y + avaliacao.y)
     estimador = classificador(**params).fit(final.x, final.y)
     api.validar(estimador, features)
@@ -213,6 +243,8 @@ def treinar_liga(
         "modelo": liga.modelo,
         "scikit_learn": sklearn,
         "features": list(features),
+        "conjunto": conjunto,
+        "candidatas": perdas,
         "partidas": {nome: len(c.y) for nome, c in conjuntos.items()},
         "hiperparametros": params,
         "log_loss_eval": perda_eval,
@@ -234,6 +266,10 @@ def imprimir(relatorio: dict) -> None:
     t = relatorio["teste"]
     print(f"\n== {relatorio['modelo']} ({relatorio['liga']})")
     print(f"partidas: TRAIN {p['TRAIN']}, EVAL {p['EVAL']}, TEST {p['TEST']}")
+    perdas = ", ".join(
+        f"{nome} {perda:.4f}" for nome, perda in relatorio["candidatas"].items()
+    )
+    print(f"features em EVAL: {perdas}; fica {relatorio['conjunto']}")
     print(
         f"escolhido em EVAL (log loss {relatorio['log_loss_eval']:.4f}): "
         f"max_depth={h['max_depth']}, learning_rate={h['learning_rate']}, "
@@ -497,7 +533,10 @@ def main(argv: list[str] | None = None) -> int:
         url = f"{cfg.dados_url.rstrip('/')}/{liga.gold}"
         linhas = api.ler_parquet(api.baixar_publico(url), None)
         estimador, relatorio = treinar_liga(
-            liga, linhas, modelo_atual(registry, tolerar=args.sem_registrar)
+            liga,
+            linhas,
+            modelo_atual(registry, tolerar=args.sem_registrar),
+            candidatas=CANDIDATAS,
         )
         relatorio["execucao"] = carimbo
         imprimir(relatorio)

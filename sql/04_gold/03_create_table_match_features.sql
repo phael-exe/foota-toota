@@ -42,6 +42,12 @@ SELECT
     LEAST(hf.rest_days, 60) AS home_rest_days,
     LEAST(af.rest_days, 60) AS away_rest_days,
     h.h2h_avg_points_last_5,
+
+    -- long-run strength: Elo of both clubs before the kickoff (gold.match_elo)
+    e.elo_home,
+    e.elo_away,
+    e.elo_diff,
+    e.elo_p_home,
     ARRAY_CONCAT(
         COALESCE(hf.season_match_ids, []),
         COALESCE(af.season_match_ids, []),
@@ -75,4 +81,6 @@ LEFT JOIN `PROJECT.gold.team_form` hf
 LEFT JOIN `PROJECT.gold.team_form` af
        ON af.match_id = m.match_id AND af.team_id = m.away_team_id
 LEFT JOIN `PROJECT.gold.h2h_form` h
-       ON h.match_id = m.match_id;
+       ON h.match_id = m.match_id
+LEFT JOIN `PROJECT.gold.match_elo` e
+       ON e.match_id = m.match_id;

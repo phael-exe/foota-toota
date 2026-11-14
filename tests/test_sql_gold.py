@@ -17,3 +17,14 @@ def test_regra_g9_confere_features_ate():
         SQL / "05_gold_checks" / "10_assert_g9_features_ate_before_kickoff.sql"
     )
     assert "features_ate >= kickoff_utc" in regra.read_text()
+
+
+def test_features_tem_o_elo_calculado_antes_delas():
+    gold = SQL / "04_gold"
+    nomes = sorted(p.name for p in gold.glob("*.sql"))
+    assert nomes.index("02a_create_table_match_elo.sql") < nomes.index(
+        "03_create_table_match_features.sql"
+    )
+    texto = (gold / "03_create_table_match_features.sql").read_text()
+    colunas = set(re.findall(r"\be\.(elo_\w+)", texto))
+    assert colunas == {"elo_home", "elo_away", "elo_diff", "elo_p_home"}

@@ -171,6 +171,32 @@ def test_campeao_e_avaliado_com_as_features_dele():
     assert campeao.larguras and set(campeao.larguras) == {2}
 
 
+def test_escolhe_as_features_pela_log_loss_em_eval():
+    # Nas linhas de teste, só diff_avg_points_season decide o resultado; o
+    # descanso é constante e não ensina nada
+    candidatas = {
+        "descanso": ("home_rest_days", "away_rest_days"),
+        "forca": ("diff_avg_points_season", "home_rest_days"),
+    }
+
+    estimador, relatorio = treinar.treinar_liga(
+        BSA, GOLD, lambda liga: None, candidatas=candidatas, **BUSCA
+    )
+
+    assert relatorio["conjunto"] == "forca"
+    assert relatorio["features"] == list(candidatas["forca"])
+    perdas = relatorio["candidatas"]
+    assert set(perdas) == {"descanso", "forca"}
+    assert perdas["forca"] < perdas["descanso"]
+    assert relatorio["log_loss_eval"] == perdas["forca"]
+    assert api.validar(estimador, candidatas["forca"]) is estimador
+
+
+def test_candidatas_de_producao_incluem_o_modelo_atual_e_o_elo():
+    assert treinar.CANDIDATAS["forma"] == api.FEATURES
+    assert set(treinar.ELO) <= set(treinar.CANDIDATAS["forma+elo"])
+
+
 def test_artefatos_levam_a_lista_de_features():
     estimador, relatorio = treinar.treinar_liga(
         BSA, GOLD, lambda liga: None, **BUSCA
