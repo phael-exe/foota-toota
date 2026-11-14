@@ -3,7 +3,9 @@
 #   - a service account do Airflow (airflow-orquestrador), com os papéis que os DAGs usam;
 #   - o firewall do SSH pelo IAP, por onde passam o deploy e o túnel da interface;
 #   - com ALERTA_EMAIL no .env, o canal de e-mail e a política de alerta sobre o log
-#     foota-toota-alertas. Sem ALERTA_EMAIL, as falhas ficam no Cloud Logging e na interface.
+#     foota-toota-alertas. Sem ALERTA_EMAIL, as falhas ficam no Cloud Logging e na interface;
+#   - com AVISO_EMAILS (ou só ALERTA_EMAIL), a política que avisa o time por e-mail quando o
+#     batch_diario publica dados novos e a plataforma já os carregou (log foota-toota-avisos).
 #
 #   orquestracao/infra.sh
 set -euo pipefail
@@ -57,27 +59,56 @@ if ! "$GCLOUD" compute firewall-rules describe foota-toota-iap-ssh "$project" >/
         --target-tags=airflow "$project"
 fi
 
-echo "=== alerta por e-mail"
-if [ -z "${ALERTA_EMAIL:-}" ]; then
-    echo "aviso: ALERTA_EMAIL ausente no .env; sem e-mail (as falhas ficam no log foota-toota-alertas)" >&2
-    exit 0
-fi
-nome_canal="foota-toota alertas"
-canal="$("$GCLOUD" beta monitoring channels list "$project" \
-    --filter="displayName=\"$nome_canal\"" --format='value(name)' | head -1)"
-if [ -z "$canal" ]; then
-    canal="$("$GCLOUD" beta monitoring channels create "$project" --display-name="$nome_canal" \
-        --type=email --channel-labels="email_address=$ALERTA_EMAIL" --format='value(name)')"
-fi
-politica_json="$(mktemp)"
-trap 'rm -f "$politica_json"' EXIT
-sed -e "s|PROJECT|$GCP_PROJECT_ID|g" -e "s|CANAL|$canal|g" \
-    "$root/orquestracao/alerta.json" > "$politica_json"
-politica="$("$GCLOUD" monitoring policies list "$project" \
-    --filter='displayName="foota-toota: falha no Airflow"' --format='value(name)' | head -1)"
-if [ -z "$politica" ]; then
-    "$GCLOUD" monitoring policies create --policy-from-file="$politica_json" "$project" >/dev/null
+# canal_email <e-mail>: o canal de e-mail do Cloud Monitoring para o endereço, criado se faltar
+canal_email() {
+    local nome="foota-toota $1" canal
+    canal="$("$GCLOUD" beta monitoring channels list "$project" \
+        --filter="labels.email_address=\"$1\"" --format='value(name)' | head -1)"
+    if [ -z "$canal" ]; then
+        canal="$("$GCLOUD" beta monitoring channels create "$project" --display-name="$nome" \
+            --type=email --channel-labels="email_address=$1" --format='value(name)')"
+    fi
+    echo "$canal"
+}
+
+# politica <arquivo.json> <nome> <canais em JSON>: cria ou atualiza a política de alerta
+politica() {
+    local json nome="$2" existente
+    json="$(mktemp)"
+    sed -e "s|PROJECT|$GCP_PROJECT_ID|g" -e "s|CANAIS|$3|g" \
+        "$root/orquestracao/$1" > "$json"
+    existente="$("$GCLOUD" monitoring policies list "$project" \
+        --filter="displayName=\"$nome\"" --format='value(name)' | head -1)"
+    if [ -z "$existente" ]; then
+        "$GCLOUD" monitoring policies create --policy-from-file="$json" "$project" >/dev/null
+    else
+        "$GCLOUD" monitoring policies update "$existente" --policy-from-file="$json" "$project" >/dev/null
+    fi
+    rm -f "$json"
+}
+
+echo "=== alerta de falha por e-mail (time de dados)"
+if [ -n "${ALERTA_EMAIL:-}" ]; then
+    canal="$(canal_email "$ALERTA_EMAIL")"
+    politica alerta.json "foota-toota: falha no Airflow" "[\"$canal\"]"
+    echo "falhas para $ALERTA_EMAIL"
 else
-    "$GCLOUD" monitoring policies update "$politica" --policy-from-file="$politica_json" "$project" >/dev/null
+    echo "aviso: ALERTA_EMAIL ausente no .env; sem e-mail (as falhas ficam no log foota-toota-alertas)" >&2
 fi
-echo "alerta para $ALERTA_EMAIL ($canal)"
+
+echo "=== aviso de dados atualizados por e-mail (o time todo)"
+# AVISO_EMAILS: endereços separados por vírgula; sem ele, o aviso vai para o ALERTA_EMAIL
+destinos="${AVISO_EMAILS:-${ALERTA_EMAIL:-}}"
+if [ -n "$destinos" ]; then
+    canais=()
+    IFS=',' read -r -a enderecos <<< "$destinos"
+    for email in "${enderecos[@]}"; do
+        email="$(echo "$email" | tr -d '[:space:]')"
+        [ -n "$email" ] && canais+=("\"$(canal_email "$email")\"")
+    done
+    lista="$(IFS=,; echo "${canais[*]}")"
+    politica aviso.json "foota-toota: dados atualizados" "[$lista]"
+    echo "aviso para ${#canais[@]} endereço(s)"
+else
+    echo "aviso: sem AVISO_EMAILS nem ALERTA_EMAIL; o aviso fica só no log foota-toota-avisos" >&2
+fi

@@ -9,7 +9,8 @@
 #
 # Antes de sobrescrever o bronze, a versão anterior dessas pastas vai para
 # gs://$GCS_BUCKET/backup/<timestamp>/bronze/. As demais fontes (Big Balls, Transfermarkt, FPL,
-# notícias) não são tocadas.
+# notícias) não são coletadas aqui; as notícias que o job diário (foota-toota-news-job) deixou no
+# bucket entram no bronze do BigQuery antes da silver, para a plataforma não parar nelas.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -24,6 +25,8 @@ fi
 : "${GCP_PROJECT_ID:?set GCP_PROJECT_ID in .env}"
 : "${GCS_BUCKET:?set GCS_BUCKET in .env}"
 GCLOUD="${GCLOUD_BIN:-gcloud}"
+# o Python da coleta: o do projeto (uv) na máquina, o da imagem no Cloud Run Job (PYTHON_BIN)
+read -r -a python <<< "${PYTHON_BIN:-uv run python}"
 
 sources=(football_data_org football_data_org_standings football_data_uk football_data_uk_bra)
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -36,7 +39,7 @@ done
 
 echo "=== coleta"
 cd "$root"
-uv run python - <<'EOF'
+"${python[@]}" - <<'EOF'
 import sys
 import time
 
@@ -74,7 +77,10 @@ cd "$root/sql"
     01_bronze/39_create_table_football_data_org_standings.sql \
     01_bronze/40_create_external_table_football_data_uk_bra.sql \
     01_bronze/41_create_table_football_data_uk_bra.sql \
-    02_silver 03_silver_checks 04_gold 05_gold_checks
+    01_bronze/24_create_external_table_news_rss.sql \
+    01_bronze/25_create_table_news_rss.sql \
+    02_silver 03_silver_checks 04_gold 05_gold_checks \
+    10_stream/12_create_view_predicoes_publicas.sql
 
 echo "=== exportação pública"
 "$root/scripts/exportar_tabelas_publicas.sh"

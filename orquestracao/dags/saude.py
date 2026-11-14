@@ -6,7 +6,9 @@
 - `dataflow`: o último job do streaming não falhou;
 - `atraso_predicao`: com o Dataflow ligado, nenhum evento de jogo agendado
   espera mais de 10 minutos pela predição. Com o Dataflow desligado, é pulada:
-  os eventos esperam na assinatura de propósito.
+  os eventos esperam na assinatura de propósito;
+- `exportacao_publica`: o bucket público que a plataforma lê foi exportado nas
+  últimas 36 horas (o `batch_diario` exporta uma vez por dia).
 
 Cada problema falha a task com a mensagem, e a falha vira alerta por e-mail.
 """
@@ -20,6 +22,7 @@ from airflow.sdk import dag, task
 from airflow.sdk.exceptions import AirflowFailException, AirflowSkipException
 from foota.config import (
     ATRASO_MAX_MIN,
+    EXPORTACAO_MAX,
     JANELA_FALHAS,
     JOB_COLETOR,
     JOB_NOTICIAS,
@@ -152,9 +155,23 @@ def saude():
             raise AirflowFailException(problema)
         return linha["pendentes"]
 
+    @task
+    def exportacao_publica() -> str:
+        from foota.publicacao import ler_manifesto, problema_exportacao
+
+        manifesto = ler_manifesto()
+        exportada = datetime.fromisoformat(manifesto["exported_at"])
+        problema = problema_exportacao(
+            exportada, datetime.now(UTC), EXPORTACAO_MAX
+        )
+        if problema:
+            raise AirflowFailException(problema)
+        return manifesto["version"]
+
     api_modelo()
     jobs_cloud_run()
     atraso_predicao(dataflow())
+    exportacao_publica()
 
 
 saude()

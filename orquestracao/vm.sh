@@ -24,7 +24,7 @@ GCLOUD="${GCLOUD_BIN:-gcloud}"
 VM=foota-toota-airflow
 ZONA=us-central1-a
 SA="airflow-orquestrador@$GCP_PROJECT_ID.iam.gserviceaccount.com"
-DAGS=(coleta_ao_vivo coleta_noticias disparar_eventos saude dataflow_liga_desliga)
+DAGS=(coleta_ao_vivo coleta_noticias disparar_eventos saude dataflow_liga_desliga batch_diario)
 project="--project=$GCP_PROJECT_ID"
 
 na_vm() {

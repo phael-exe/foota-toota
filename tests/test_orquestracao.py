@@ -12,7 +12,7 @@ import pytest
 DAGS = Path(__file__).resolve().parent.parent / "orquestracao" / "dags"
 sys.path.insert(0, str(DAGS))
 
-from foota import alerta, replay, saude  # noqa: E402
+from foota import alerta, publicacao, replay, saude  # noqa: E402
 
 
 AGORA = datetime(2026, 11, 12, 15, 0, tzinfo=UTC)
@@ -182,3 +182,99 @@ def test_entrada_do_alerta():
         "erro": "boom",
         "mensagem": "saude.api_modelo falhou: boom",
     }
+
+
+# --- publicação para a plataforma ---------------------------------------------
+
+
+def manifesto(versao: str, **linhas: int) -> dict:
+    return {
+        "version": versao,
+        "exported_at": "2026-11-14T09:20:00+00:00",
+        "files": [
+            {"path": f"{caminho.replace('__', '/')}.{ext}", "rows": n}
+            for caminho, n in linhas.items()
+            for ext in ("parquet", "csv")
+        ],
+    }
+
+
+def test_versao_do_manifesto():
+    assert publicacao.versao_do_manifesto({"version": "20261114T092000Z"}) == (
+        "20261114T092000Z"
+    )
+
+
+@pytest.mark.parametrize("corpo", [{}, {"version": ""}, None, []])
+def test_manifesto_sem_versao_e_recusado(corpo):
+    with pytest.raises(ValueError, match="version"):
+        publicacao.versao_do_manifesto(corpo)
+
+
+def test_versao_que_a_plataforma_carregou():
+    corpo = {"versao": "20261114T092000Z", "exportada_em": "x"}
+    corpo["amostra"] = False
+    assert publicacao.versao_da_plataforma(corpo) == "20261114T092000Z"
+
+
+@pytest.mark.parametrize(
+    "corpo",
+    [None, {}, {"detail": "Not Found"}, {"versao": "v", "amostra": True}],
+)
+def test_plataforma_sem_versao_ou_na_amostra_nao_conta(corpo):
+    assert publicacao.versao_da_plataforma(corpo) is None
+
+
+def test_exportacao_recente_nao_e_problema():
+    exportada = AGORA - timedelta(hours=20)
+    assert (
+        publicacao.problema_exportacao(exportada, AGORA, timedelta(hours=36))
+        is None
+    )
+
+
+def test_exportacao_velha_e_problema_com_a_idade():
+    exportada = datetime(2026, 10, 19, 12, 31, tzinfo=UTC)
+    problema = publicacao.problema_exportacao(
+        exportada, AGORA, timedelta(hours=36)
+    )
+    assert problema is not None
+    assert "24 dias" in problema
+    assert "19/10" in problema
+
+
+def test_aviso_lista_so_o_que_a_plataforma_le_e_mudou():
+    antigo = manifesto(
+        "20261019T123136Z",
+        silver__matches=29655,
+        gold__predictions=0,
+        silver__news_articles=9020,
+        silver__teams=316,
+        silver__transfers=175165,
+    )
+    novo = manifesto(
+        "20261114T092000Z",
+        silver__matches=29810,
+        gold__predictions=51,
+        silver__news_articles=12400,
+        silver__teams=316,
+        silver__transfers=175900,
+    )
+    texto = publicacao.resumo_aviso(antigo, novo, "https://plataforma")
+    assert "14/11/2026 06:20 (Brasília)" in texto
+    assert "20261114T092000Z" in texto
+    assert "silver/matches: 29.655 → 29.810 (+155)" in texto
+    assert "gold/predictions: 0 → 51 (+51)" in texto
+    assert "silver/news_articles: 9.020 → 12.400 (+3.380)" in texto
+    # sem mudança, ou fora do que a plataforma lê, não entra
+    assert "silver/teams" not in texto
+    assert "transfers" not in texto
+    assert ".csv" not in texto
+    assert "https://plataforma" in texto
+
+
+def test_aviso_sem_versao_anterior_ou_sem_mudanca():
+    novo = manifesto("20261114T092000Z", silver__matches=10)
+    assert "silver/matches: 10" in publicacao.resumo_aviso(None, novo, "u")
+    igual = publicacao.resumo_aviso(novo, novo, "u")
+    assert "nenhuma tabela mudou de tamanho" in igual

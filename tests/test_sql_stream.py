@@ -88,3 +88,22 @@ def test_run_sh_cria_a_tabela_antes_do_alter_em_qualquer_locale(tmp_path):
     )
     alterar = next(i for i, n in enumerate(ordem) if "03a_alter" in n)
     assert criar < alterar
+
+
+def test_predicoes_publicas_saem_no_id_da_silver_depois_do_que_leem():
+    nomes = sorted(p.name for p in SQL.glob("*.sql"))
+    publicas = nomes.index("12_create_view_predicoes_publicas.sql")
+    assert nomes.index("06_create_view_partidas_unificadas.sql") < publicas
+    assert nomes.index("10_create_view_predicoes.sql") < publicas
+    texto = (SQL / "12_create_view_predicoes_publicas.sql").read_text()
+    assert "silver.matches`" in texto
+    assert "stream_match_id" in texto
+    # uma linha por jogo: a plataforma indexa as predições pelo match_id
+    assert "PARTITION BY COALESCE(m.match_id, p.match_id)" in texto
+
+
+def test_exportacao_publica_le_as_predicoes_publicas():
+    texto = (RAIZ / "scripts" / "exportar_tabelas_publicas.sh").read_text()
+    publicas = r"FROM \\`\$GCP_PROJECT_ID\.gold\.predicoes_publicas\\`"
+    assert re.search(publicas, texto)
+    assert not re.search(r"gold\.predicoes\\?`", texto)

@@ -1,0 +1,26 @@
+{
+  "displayName": "foota-toota: dados atualizados",
+  "documentation": {
+    "content": "${log.extracted_label.mensagem}\n\nAviso automático do DAG `batch_diario`: a exportação nova já está carregada na plataforma.",
+    "mimeType": "text/markdown",
+    "subject": "foota-toota: dados de futebol atualizados (versão ${log.extracted_label.versao})"
+  },
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "exportação nova carregada na plataforma",
+      "conditionMatchedLog": {
+        "filter": "logName=\"projects/PROJECT/logs/foota-toota-avisos\" AND severity=NOTICE",
+        "labelExtractors": {
+          "mensagem": "EXTRACT(jsonPayload.mensagem)",
+          "versao": "EXTRACT(jsonPayload.versao)"
+        }
+      }
+    }
+  ],
+  "alertStrategy": {
+    "notificationRateLimit": { "period": "300s" },
+    "autoClose": "1800s"
+  },
+  "notificationChannels": CANAIS
+}

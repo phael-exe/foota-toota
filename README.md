@@ -44,7 +44,7 @@ flowchart LR
         DFL --> SFA[("stream.predicoes_falhas")]
     end
     subgraph orq ["Orquestração"]
-        AIR["Airflow na VM<br>coleta, replay, saúde"]
+        AIR["Airflow na VM<br>coleta, batch diário, replay, saúde"]
     end
     subgraph ml ["Modelo"]
         TRN["modelo/treinar.py"] --> REG["Vertex AI<br>Model Registry"]
@@ -84,7 +84,8 @@ flowchart LR
    onde a API do modelo e a plataforma leem sem precisar de conta no GCP.
 
 `scripts/atualizar_partidas.sh` refaz esse caminho para as fontes de
-partidas. Um Cloud Run Job diário coleta as notícias.
+partidas e roda todo dia como o Cloud Run Job `foota-toota-batch`. Outro Cloud
+Run Job diário coleta as notícias.
 
 ### Streaming
 
@@ -152,12 +153,14 @@ reprovado é servido.
 
 Um Airflow 3 numa VM (`orquestracao/`) aciona os serviços e não processa
 dados. Ele executa o coletor a cada 5 minutos e as notícias uma vez por dia.
+O `batch_diario` atualiza o batch e o bucket público às 09:00 UTC, espera a
+plataforma carregar a versão nova e avisa o time por e-mail.
 O DAG `disparar_eventos` gera os eventos da demo reproduzindo rodadas, e só
 aceita temporadas fora do treino do modelo. O `dataflow_liga_desliga` sobe o
 streaming por um Flex Template e o drena depois. O `saude` confere, a cada 15
 minutos, a API, as execuções dos Jobs, o Dataflow e o atraso entre evento e
-predição. Toda task que falha grava um alerta no Cloud Logging, que vira
-e-mail. Detalhes em [docs/arquitetura/orquestracao.md](docs/arquitetura/orquestracao.md).
+predição, e se o bucket público passou de 36 horas sem exportação. Toda task
+que falha grava um alerta no Cloud Logging, que vira e-mail. Detalhes em [docs/arquitetura/orquestracao.md](docs/arquitetura/orquestracao.md).
 
 ### Escolhas técnicas
 
@@ -238,8 +241,10 @@ falha (`ASSERT`) para a execução ali, e a saída de cada script fica em
 nada, se o pipeline está de pé.
 
 Para manter as partidas em dia, `scripts/atualizar_partidas.sh` coleta de
-novo o Football-Data.org e o Football-Data.co.uk, reconstrói o bronze dessas
-fontes, a silver e a gold, e reexporta as tabelas públicas.
+novo o Football-Data.org e o Football-Data.co.uk, leva as notícias do bucket
+para o bronze, reconstrói a silver e a gold e reexporta as tabelas públicas.
+`batch/deploy_job.sh` publica esse script como o Cloud Run Job
+`foota-toota-batch`, que o DAG `batch_diario` executa todo dia.
 
 | Pasta | O que cria |
 | --- | --- |
@@ -267,7 +272,8 @@ streaming/dataflow.sh parar      # drena e encerra
 Com o Airflow (veja [orquestração](docs/arquitetura/orquestracao.md)):
 
 ```bash
-orquestracao/infra.sh            # service account, firewall do IAP e alerta por e-mail
+orquestracao/infra.sh            # service account, firewall do IAP, alerta e aviso por e-mail
+batch/deploy_job.sh              # Job foota-toota-batch (o batch_diario executa)
 orquestracao/vm.sh criar         # VM do Airflow (uma vez)
 orquestracao/vm.sh enviar        # publica os DAGs e sobe o Airflow
 orquestracao/vm.sh tunel         # interface em http://localhost:8080
@@ -401,7 +407,8 @@ do cliente aceitam o prefixo `PITCHSIDE_` e as da aplicação o prefixo
 | `scripts/` | Coleta do batch, atualização das partidas e exportação pública |
 | `sql/` | Camadas bronze, silver e gold, regras de qualidade e tabelas do stream |
 | `streaming/` | Coletor, pipeline Apache Beam, infraestrutura e deploy |
-| `orquestracao/` | Airflow: DAGs, docker compose, VM e alerta |
+| `batch/` | Imagem e deploy do Job diário que atualiza o batch e o bucket público |
+| `orquestracao/` | Airflow: DAGs, docker compose, VM, alerta e aviso |
 | `modelo/` | API, treino, Dockerfile, SQL de avaliação e deploy no Cloud Run |
 | `src/footatoota/` | Configuração do cliente da Big Balls Data |
 | `tests/` | Testes do cliente, do streaming, do modelo e da orquestração |
