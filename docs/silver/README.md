@@ -66,6 +66,7 @@ A suíte de qualidade executa 23 testes automatizados após a construção da Si
 - **S19**: Minutos jogados no FPL dentro dos limites físicos da partida (`0 <= minutes <= 120`).
 - **S22**: Todo clube com jogos em duas fontes chega a um único `team_id` (`silver.team_map.unresolved`).
 - **S23**: Estatísticas e odds nas colunas certas, por liga: chutes no alvo acima dos chutes em no máximo 1% dos jogos, e o favorito da Bet365 vencendo ao menos 35% (uma coluna deslocada dá ~22%).
+- **S24** (aviso): Na temporada atual de cada liga, se algum jogo tem rodada, todos têm. Os arquivos do Football-Data.co.uk não trazem rodada, e o jogo encerrado que vem deles a pega da linha do Football-Data.org do mesmo confronto. Bélgica e Escócia não têm fonte com rodada.
 
 ### Quarentenas e Avisos (`quality.occurrences`)
 - **S7**: Registra quarentena se `SAFE_CAST` retornar NULL para um valor bruto não-nulo.

@@ -293,15 +293,27 @@ ranked AS (
     WHERE rn = 1
 ),
 
-fixtures AS (
+-- The files of Football-Data.co.uk carry no round, so a finished game kept from them would lose the
+-- round its Football-Data.org row had. The round comes back from that row of the same fixture
+-- (one per season in a double round robin). The Champions League repeats a pairing across phases.
+fixture_rounds AS (
     SELECT *,
+        MAX(IF(source_id = 'football_data_org', round, NULL)) OVER (
+            PARTITION BY league_id, season, home_team_id, away_team_id
+        ) AS fdorg_round
+    FROM ranked
+),
+
+fixtures AS (
+    SELECT * EXCEPT (round, fdorg_round),
+        IF(league_id = 'champions_league', round, COALESCE(round, fdorg_round)) AS round,
         ROW_NUMBER() OVER (
             PARTITION BY league_id, season, home_team_id, away_team_id
             ORDER BY status = 'finished' DESC, source_rank
         ) AS fixture_rn,
         MIN(IF(status = 'finished', source_rank, NULL)) OVER fixture AS best_finished_rank,
         MIN(source_rank) OVER fixture AS best_rank
-    FROM ranked
+    FROM fixture_rounds
     WINDOW fixture AS (PARTITION BY league_id, season, home_team_id, away_team_id)
 )
 SELECT
