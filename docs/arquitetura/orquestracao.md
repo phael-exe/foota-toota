@@ -58,7 +58,7 @@ arquivos no lugar. A plataforma carrega 12 arquivos (`TABELAS_PLATAFORMA` em
 | Task | O que faz |
 | --- | --- |
 | `versao_anterior` | Lê a versão publicada antes de rodar |
-| `atualizar` | Executa o Job `foota-toota-batch` ([`scripts/atualizar_partidas.sh`](../../scripts/atualizar_partidas.sh)). Ele faz a coleta do Football-Data.org e do Football-Data.co.uk, leva as notícias do bucket para o bronze, reconstrói silver e gold com as checagens e exporta. Uma checagem que falha para o job antes da exportação, e a plataforma continua com a versão anterior |
+| `atualizar` | Executa o Job `foota-toota-batch` ([`scripts/atualizar_partidas.sh`](../../scripts/atualizar_partidas.sh)). Ele começa prevendo de novo os jogos dos próximos 7 dias com a gold da véspera (`scripts/repredizer.py`, em `stream.predicoes_lote`). Depois faz a coleta do Football-Data.org e do Football-Data.co.uk (com as odds dos próximos jogos), leva as notícias do bucket para o bronze, reconstrói silver e gold com as checagens e exporta. Uma checagem que falha para o job antes da exportação, e a plataforma continua com a versão anterior |
 | `versao_nova` | Confere que o manifesto mudou de versão |
 | `plataforma_carregou` | Sensor: a cada 2 min, pergunta a versão a `GET /api/futebol/versao` da plataforma, até ela ser a nova. A própria consulta é a requisição que faz a plataforma reler o manifesto |
 | `avisar_time` | Grava no log `foota-toota-avisos` o que mudou (linhas por tabela que a plataforma lê), e a política "foota-toota: dados atualizados" manda o e-mail para `AVISO_EMAILS` |
